@@ -1,5 +1,4 @@
-﻿
-#include <iostream>
+﻿#include <iostream>
 #include <fstream>
 #include <string>
 #include <stack>
@@ -21,8 +20,11 @@
 
 GLuint shader_programme, vao, vbo;
 glm::mat4 projectionMatrix, viewMatrix;
-GLuint matrixID;
-GLuint colorID; 
+// Uniform ID-uri
+GLuint modelMatrixID_uniform;
+GLuint viewMatrixID_uniform;
+GLuint projectionMatrixID_uniform;
+GLuint colorID;
 
 // Animatie mana
 float animationProgress = 0.0f;
@@ -55,12 +57,13 @@ float keyframePoses[NUM_POSES][NUM_JOINTS] = {
 int hitKeyframeIndex = 3;
 
 
-
+// Unghiuri curente pentru articulatiile mainii
 float currentShoulderY, currentShoulderZ, currentElbow;
 float currentWristPronation, currentWristZ, currentWristY;
 float currentFingerKnuckle, currentFingerMid;
 float currentThumbBaseZ, currentThumbKnuckle, currentThumbMid;
 
+// Dimensiuni parti mana
 float armLength = 2.5f * 0.75f; float armWidth = 0.6f * 0.75f;
 float forearmLength = 2.0f * 0.75f; float forearmWidth = 0.5f * 0.75f;
 float palmLength = 1.2f * 0.75f; float palmWidth = 1.2f * 0.75f;
@@ -69,7 +72,15 @@ float fingerWidth = 0.18f * 0.75f; float thumbLength = 0.7f * 0.75f;
 float thumbWidth = 0.20f * 0.75f;
 
 
-float cubeVertices[] = { -0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,-0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,-0.5f,0.5f };
+// Varfuri pentru un cub unitar (Pozitie + Normala)
+float cubeVertices[] = {
+    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,   0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,   0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,   0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,   0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,   0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,   0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,   0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,   0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,   0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,   0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,   0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+};
 
 // Mingea
 glm::vec3 ballPosition;
@@ -122,6 +133,18 @@ float cameraRotationSpeed = 2.5f;
 float cameraYaw = -200.0f;
 float cameraPitch = -15.0f;
 
+// Variabile Iluminare
+GLuint lightPos1ID, lightColor1ID;
+GLuint lightPos2ID, lightColor2ID;
+GLuint viewPosID_uniform;
+GLuint ambientColorID;
+
+glm::vec3 lightPos1 = glm::vec3(-overallRoomW / 4.0f, 11.0f, 0.0f);
+glm::vec3 lightColor1 = glm::vec3(0.9f, 0.9f, 0.8f);
+glm::vec3 lightPos2 = glm::vec3(overallRoomW / 4.0f, 11.0f, 0.0f);
+glm::vec3 lightColor2 = glm::vec3(0.9f, 0.9f, 0.8f);
+glm::vec3 globalAmbientColor = glm::vec3(0.2f, 0.2f, 0.25f);
+
 
 std::string textFileRead(const char* fn) { std::ifstream ifile(fn); if (!ifile.is_open()) { std::cerr << "Eroare la deschiderea fisierului: " << fn << std::endl; return ""; } std::string filetext; std::string line; while (std::getline(ifile, line)) { filetext.append(line + "\n"); } return filetext; }
 float lerp(float start, float end, float t_lerp) { t_lerp = glm::clamp(t_lerp, 0.0f, 1.0f); return start + t_lerp * (end - start); }
@@ -143,6 +166,8 @@ void generateSphere() {
             float sectorAngle = 2 * PI * (float)j / sphereSlices;
             float x_coord = xy_coord * cos(sectorAngle); float y_coord = xy_coord * sin(sectorAngle);
             sphereVertices_data.push_back(x_coord); sphereVertices_data.push_back(y_coord); sphereVertices_data.push_back(z_coord);
+            glm::vec3 normal = glm::normalize(glm::vec3(x_coord, y_coord, z_coord));
+            sphereVertices_data.push_back(normal.x); sphereVertices_data.push_back(normal.y); sphereVertices_data.push_back(normal.z);
         }
     }
     for (int i = 0; i < sphereStacks; ++i) {
@@ -157,35 +182,46 @@ void generateCuboidVertices(float width, float height, float depth, std::vector<
     vertices.clear(); indices.clear();
     float halfW = width / 2.0f; float halfH = height / 2.0f; float halfD = depth / 2.0f;
     vertices = {
-        -halfW, -halfH,  halfD,  halfW, -halfH,  halfD,  halfW,  halfH,  halfD, -halfW,  halfH,  halfD,
-        -halfW, -halfH, -halfD,  halfW, -halfH, -halfD,  halfW,  halfH, -halfD, -halfW,  halfH, -halfD
+        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,   halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,   halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,
+        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,   halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,   halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,
+        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,   halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,   halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,
+        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,   halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,   halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,
+         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,   halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,   halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,   halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,
+        -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f
     };
     indices = {
-        0, 1, 2,  0, 2, 3,  1, 5, 6,  1, 6, 2,  5, 4, 7,  5, 7, 6,
-        4, 0, 3,  4, 3, 7,  3, 2, 6,  3, 6, 7,  4, 5, 1,  4, 1, 0
+        0, 1, 2,   0, 2, 3,    4, 5, 6,   4, 6, 7,    8, 9, 10,  8, 10,11,
+        12,13,14,  12,14,15,   16,17,18,  16,18,19,   20,21,22,  20,22,23
     };
 }
-void drawCube(const glm::mat4& modelMatrix, const glm::vec3& color) {
+
+
+void drawCube(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
     glUniform3fv(colorID, 1, glm::value_ptr(color));
-    glm::mat4 modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
-    glUniformMatrix4fv(matrixID, 1, GL_FALSE, glm::value_ptr(modelViewProjectionMatrix));
-    glBindVertexArray(vao); glDrawArrays(GL_TRIANGLES, 0, 36); glBindVertexArray(0);
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
+    glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
 }
-void drawSphere(const glm::mat4& modelMatrix, const glm::vec3& color) {
+
+void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
     glUniform3fv(colorID, 1, glm::value_ptr(color));
-    glm::mat4 modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
-    glUniformMatrix4fv(matrixID, 1, GL_FALSE, glm::value_ptr(modelViewProjectionMatrix));
-    glBindVertexArray(sphereVao); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo);
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
+    glBindVertexArray(sphereVao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo);
     glDrawElements(GL_TRIANGLES, sphereIndices_data.size(), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
-void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices, const glm::mat4& modelMatrix, const glm::vec3& color) {
+
+void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices, const glm::mat4& modelMatrixIn, const glm::vec3& color) {
     glUniform3fv(colorID, 1, glm::value_ptr(color));
-    glm::mat4 modelViewProjectionMatrix = projectionMatrix * viewMatrix * modelMatrix;
-    glUniformMatrix4fv(matrixID, 1, GL_FALSE, glm::value_ptr(modelViewProjectionMatrix));
-    glBindVertexArray(vao_cuboid); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_cuboid);
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
+    glBindVertexArray(vao_cuboid);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_cuboid);
     glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
 
@@ -293,8 +329,20 @@ void update() {
 void display() {
     updateCameraFront();
     viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(shader_programme);
+
+    glUniform3fv(lightPos1ID, 1, glm::value_ptr(lightPos1));
+    glUniform3fv(lightColor1ID, 1, glm::value_ptr(lightColor1));
+    glUniform3fv(lightPos2ID, 1, glm::value_ptr(lightPos2));
+    glUniform3fv(lightColor2ID, 1, glm::value_ptr(lightColor2));
+    glUniform3fv(viewPosID_uniform, 1, glm::value_ptr(cameraPos));
+    glUniform3fv(ambientColorID, 1, glm::value_ptr(globalAmbientColor));
+
+    glUniformMatrix4fv(viewMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(viewMatrix));
+    glUniformMatrix4fv(projectionMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
+
 
     float floorTopSurfaceY = 0.0f;
     float ceilingBottomSurfaceY = 12.0f;
@@ -331,7 +379,8 @@ void display() {
     netDisplayMatrix = glm::scale(netDisplayMatrix, netDimensions); drawCube(netDisplayMatrix, netColor);
 
     if (ballIsServed || ballInToss || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
-        glm::mat4 ballModelMatrix = glm::mat4(1.0f); ballModelMatrix = glm::translate(ballModelMatrix, ballPosition); drawSphere(ballModelMatrix, ballColor);
+        glm::mat4 ballModelMatrix = glm::mat4(1.0f); ballModelMatrix = glm::translate(ballModelMatrix, ballPosition);
+        drawSphere(ballModelMatrix, ballColor); 
     }
 
     glm::mat4 baseTransformMatrix = glm::mat4(1.0f);
@@ -341,27 +390,37 @@ void display() {
     glm::mat4 currentMatrix = baseTransformMatrix;
     currentMatrix = glm::rotate(currentMatrix, currentShoulderY, glm::vec3(0.0f, 1.0f, 0.0f)); currentMatrix = glm::rotate(currentMatrix, currentShoulderZ, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 elbowJointMatrix = glm::translate(currentMatrix, glm::vec3(armLength, 0.0f, 0.0f));
-    glm::mat4 armDrawMatrix = glm::translate(currentMatrix, glm::vec3(armLength / 2.0f, 0.0f, 0.0f)); drawCube(glm::scale(armDrawMatrix, glm::vec3(armLength, armWidth, armWidth)), handColor);
+    glm::mat4 armDrawMatrix = glm::translate(currentMatrix, glm::vec3(armLength / 2.0f, 0.0f, 0.0f));
+    drawCube(glm::scale(armDrawMatrix, glm::vec3(armLength, armWidth, armWidth)), handColor);
+
     currentMatrix = elbowJointMatrix; currentMatrix = glm::rotate(currentMatrix, currentElbow, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 wristJointMatrix = glm::translate(currentMatrix, glm::vec3(forearmLength, 0.0f, 0.0f));
-    glm::mat4 forearmDrawMatrix = glm::translate(currentMatrix, glm::vec3(forearmLength / 2.0f, 0.0f, 0.0f)); drawCube(glm::scale(forearmDrawMatrix, glm::vec3(forearmLength, forearmWidth, forearmWidth)), handColor);
+    glm::mat4 forearmDrawMatrix = glm::translate(currentMatrix, glm::vec3(forearmLength / 2.0f, 0.0f, 0.0f));
+    drawCube(glm::scale(forearmDrawMatrix, glm::vec3(forearmLength, forearmWidth, forearmWidth)), handColor);
+
     currentMatrix = wristJointMatrix; currentMatrix = glm::rotate(currentMatrix, currentWristPronation, glm::vec3(1.0f, 0.0f, 0.0f)); currentMatrix = glm::rotate(currentMatrix, currentWristZ, glm::vec3(0.0f, 0.0f, 1.0f)); currentMatrix = glm::rotate(currentMatrix, currentWristY, glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 palmCenterMatrix = glm::translate(currentMatrix, glm::vec3(palmLength / 2.0f, 0.0f, 0.0f)); drawCube(glm::scale(palmCenterMatrix, glm::vec3(palmLength, palmWidth, palmDepth)), handColor);
+    glm::mat4 palmCenterMatrix = glm::translate(currentMatrix, glm::vec3(palmLength / 2.0f, 0.0f, 0.0f));
+    drawCube(glm::scale(palmCenterMatrix, glm::vec3(palmLength, palmWidth, palmDepth)), handColor);
+
     float fingerSpacing = palmWidth * 0.8f / 3.0f; float fingerStartXOffset = palmLength / 2.0f; float fingerStartYOffsetBase = (palmWidth / 2.0f) - (fingerSpacing * 0.5f) - fingerWidth / 2.0f;
     for (int i = 0; i < 4; ++i) {
         glm::mat4 fingerBasePosMatrix = glm::translate(palmCenterMatrix, glm::vec3(fingerStartXOffset, fingerStartYOffsetBase - i * fingerSpacing, 0.0f));
         glm::mat4 knuckleMatrix = glm::rotate(fingerBasePosMatrix, currentFingerKnuckle, glm::vec3(0.0f, 0.0f, 1.0f));
-        glm::mat4 knuckleDrawMatrix = glm::translate(knuckleMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f)); drawCube(glm::scale(knuckleDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor);
+        glm::mat4 knuckleDrawMatrix = glm::translate(knuckleMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f));
+        drawCube(glm::scale(knuckleDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor);
         glm::mat4 midJointMatrix = glm::translate(knuckleMatrix, glm::vec3(fingerLength, 0.0f, 0.0f));
         glm::mat4 midSegmentMatrix = glm::rotate(midJointMatrix, currentFingerMid, glm::vec3(0.0f, 0.0f, 1.0f));
-        glm::mat4 midDrawMatrix = glm::translate(midSegmentMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f)); drawCube(glm::scale(midDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor);
+        glm::mat4 midDrawMatrix = glm::translate(midSegmentMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f));
+        drawCube(glm::scale(midDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor);
     }
     glm::mat4 thumbMatrix = glm::translate(palmCenterMatrix, glm::vec3(palmLength * 0.15f, palmWidth / 2.0f + thumbWidth * 0.5f, 0.0f));
     thumbMatrix = glm::rotate(thumbMatrix, currentThumbBaseZ, glm::vec3(0.0f, 0.0f, 1.0f)); thumbMatrix = glm::rotate(thumbMatrix, currentThumbKnuckle, glm::vec3(0.0f, 0.0f, 1.0f));
-    glm::mat4 thumbBaseDrawMatrix = glm::translate(thumbMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f)); drawCube(glm::scale(thumbBaseDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor);
+    glm::mat4 thumbBaseDrawMatrix = glm::translate(thumbMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
+    drawCube(glm::scale(thumbBaseDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor);
     glm::mat4 thumbKnuckleJointMatrix = glm::translate(thumbMatrix, glm::vec3(thumbLength, 0.0f, 0.0f));
     glm::mat4 thumbKnuckleSegmentMatrix = glm::rotate(thumbKnuckleJointMatrix, currentThumbMid, glm::vec3(0.0f, 0.0f, 1.0f));
-    glm::mat4 thumbKnuckleDrawMatrix = glm::translate(thumbKnuckleSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f)); drawCube(glm::scale(thumbKnuckleDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor);
+    glm::mat4 thumbKnuckleDrawMatrix = glm::translate(thumbKnuckleSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
+    drawCube(glm::scale(thumbKnuckleDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor);
 
     glFlush();
 }
@@ -371,38 +430,73 @@ void init() {
     glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS); glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); } printf("Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
-    glGenBuffers(1, &vbo); glBindBuffer(GL_ARRAY_BUFFER, vbo); glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+    glGenBuffers(1, &vbo); glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
     glGenVertexArrays(1, &vao); glBindVertexArray(vao); glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0); glEnableVertexAttribArray(0); glBindVertexArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 
+    // Sfera (mingea) 
     generateSphere();
     glGenVertexArrays(1, &sphereVao); glBindVertexArray(sphereVao);
-    glGenBuffers(1, &sphereVbo); glBindBuffer(GL_ARRAY_BUFFER, sphereVbo); glBufferData(GL_ARRAY_BUFFER, sphereVertices_data.size() * sizeof(float), sphereVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &sphereIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices_data.size() * sizeof(unsigned int), sphereIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0); glEnableVertexAttribArray(0); glBindVertexArray(0);
+    glGenBuffers(1, &sphereVbo); glBindBuffer(GL_ARRAY_BUFFER, sphereVbo);
+    glBufferData(GL_ARRAY_BUFFER, sphereVertices_data.size() * sizeof(float), sphereVertices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &sphereIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices_data.size() * sizeof(unsigned int), sphereIndices_data.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 
+    // Podea 
     generateCuboidVertices(courtPlayingAreaW, courtPlayingAreaThickness, courtPlayingAreaL, floorVertices_data, floorIndices_data);
     glGenVertexArrays(1, &floorVao); glBindVertexArray(floorVao);
-    glGenBuffers(1, &floorVbo); glBindBuffer(GL_ARRAY_BUFFER, floorVbo); glBufferData(GL_ARRAY_BUFFER, floorVertices_data.size() * sizeof(float), floorVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &floorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, floorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, floorIndices_data.size() * sizeof(unsigned int), floorIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0); glEnableVertexAttribArray(0); glBindVertexArray(0);
+    glGenBuffers(1, &floorVbo); glBindBuffer(GL_ARRAY_BUFFER, floorVbo);
+    glBufferData(GL_ARRAY_BUFFER, floorVertices_data.size() * sizeof(float), floorVertices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &floorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, floorIbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, floorIndices_data.size() * sizeof(unsigned int), floorIndices_data.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 
+    // Tavan
     generateCuboidVertices(overallRoomW, ceilingH_thickness, overallRoomL, ceilingVertices_data, ceilingIndices_data);
     glGenVertexArrays(1, &ceilingVao); glBindVertexArray(ceilingVao);
-    glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo); glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data.size() * sizeof(float), ceilingVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &ceilingIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ceilingIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data.size() * sizeof(unsigned int), ceilingIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0); glEnableVertexAttribArray(0); glBindVertexArray(0);
+    glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo);
+    glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data.size() * sizeof(float), ceilingVertices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &ceilingIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ceilingIbo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data.size() * sizeof(unsigned int), ceilingIndices_data.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     std::string vstext = textFileRead("vertex.vert"); std::string fstext = textFileRead("fragment.frag"); if (vstext.empty() || fstext.empty()) { fprintf(stderr, "Eroare la citirea shaderelor.\n"); exit(1); }
     const char* vertex_shader_text = vstext.c_str(); const char* fragment_shader_text = fstext.c_str();
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER); glShaderSource(vs, 1, &vertex_shader_text, NULL); glCompileShader(vs); GLint success; GLchar infoLog[512]; glGetShaderiv(vs, GL_COMPILE_STATUS, &success); if (!success) { glGetShaderInfoLog(vs, 512, NULL, infoLog); std::cerr << "EROARE::SHADER::VERTEX::COMPILARE_ESUATA\n" << infoLog << std::endl; }
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER); glShaderSource(fs, 1, &fragment_shader_text, NULL); glCompileShader(fs); glGetShaderiv(fs, GL_COMPILE_STATUS, &success); if (!success) { glGetShaderInfoLog(fs, 512, NULL, infoLog); std::cerr << "EROARE::SHADER::FRAGMENT::COMPILARE_ESUATA\n" << infoLog << std::endl; }
-    shader_programme = glCreateProgram(); glAttachShader(shader_programme, fs); glAttachShader(shader_programme, vs); glLinkProgram(shader_programme); glGetProgramiv(shader_programme, GL_LINK_STATUS, &success); if (!success) { glGetProgramInfoLog(shader_programme, 512, NULL, infoLog); std::cerr << "EROARE::SHADER::PROGRAM::LINKING_ESUAT\n" << infoLog << std::endl; }
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER); glShaderSource(vs, 1, &vertex_shader_text, NULL); glCompileShader(vs); GLint success; GLchar infoLog[512]; glGetShaderiv(vs, GL_COMPILE_STATUS, &success); if (!success) { glGetShaderInfoLog(vs, 512, NULL, infoLog); std::cerr << "EROARE::SHADER::VERTEX::COMPILARE_ESUATA\n" << infoLog << std::endl; exit(1); }
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER); glShaderSource(fs, 1, &fragment_shader_text, NULL); glCompileShader(fs); glGetShaderiv(fs, GL_COMPILE_STATUS, &success); if (!success) { glGetShaderInfoLog(fs, 512, NULL, infoLog); std::cerr << "EROARE::SHADER::FRAGMENT::COMPILARE_ESUATA\n" << infoLog << std::endl; exit(1); }
+    shader_programme = glCreateProgram(); glAttachShader(shader_programme, fs); glAttachShader(shader_programme, vs); glLinkProgram(shader_programme); glGetProgramiv(shader_programme, GL_LINK_STATUS, &success); if (!success) { glGetProgramInfoLog(shader_programme, 512, NULL, infoLog); std::cerr << "EROARE::SHADER::PROGRAM::LINKING_ESUAT\n" << infoLog << std::endl; exit(1); }
     glDeleteShader(vs); glDeleteShader(fs);
-    matrixID = glGetUniformLocation(shader_programme, "modelViewProjectionMatrix"); if (matrixID == -1) { fprintf(stderr, "Nu s-a putut gasi uniform-ul 'modelViewProjectionMatrix'\n"); }
-    colorID = glGetUniformLocation(shader_programme, "objectColor"); if (colorID == -1) { fprintf(stderr, "Nu s-a putut gasi uniform-ul 'objectColor'\n"); }
+
+    glUseProgram(shader_programme);
+    modelMatrixID_uniform = glGetUniformLocation(shader_programme, "model");
+    viewMatrixID_uniform = glGetUniformLocation(shader_programme, "view");
+    projectionMatrixID_uniform = glGetUniformLocation(shader_programme, "projection");
+    colorID = glGetUniformLocation(shader_programme, "objectColor");
+    viewPosID_uniform = glGetUniformLocation(shader_programme, "viewPos");
+    lightPos1ID = glGetUniformLocation(shader_programme, "lightPos1");
+    lightColor1ID = glGetUniformLocation(shader_programme, "lightColor1");
+    lightPos2ID = glGetUniformLocation(shader_programme, "lightPos2");
+    lightColor2ID = glGetUniformLocation(shader_programme, "lightColor2");
+    ambientColorID = glGetUniformLocation(shader_programme, "ambientColor");
+
 
     currentShoulderY = keyframePoses[0][0]; currentShoulderZ = keyframePoses[0][1]; currentElbow = keyframePoses[0][2];
     currentWristPronation = keyframePoses[0][3]; currentWristZ = keyframePoses[0][4]; currentWristY = keyframePoses[0][5];
@@ -460,7 +554,7 @@ void reshape(int w, int h) {
 int main(int argc, char** argv) {
     glutInit(&argc, argv); glutInitDisplayMode(GLUT_RGB | GLUT_SINGLE | GLUT_DEPTH);
     glutInitWindowSize(1280, 720);
-    glutCreateWindow("Serviciu Volei OpenGL - Wrist Rotated & 75% Anim");
+    glutCreateWindow("Serviciu Volei OpenGL - Iluminare Corecta Mana");
     init();
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
