@@ -18,23 +18,25 @@
 
 #define PI glm::pi<float>()
 
+// Shader, VAO/VBO pentru cub (mana/pereti/fileu/linii)
 GLuint shader_programme, vao, vbo;
 glm::mat4 projectionMatrix, viewMatrix;
-GLuint matrixID; 
-GLuint colorID;  
+GLuint matrixID; // Uniform pentru modelViewProjectionMatrix
+GLuint colorID;  // Uniform pentru objectColor
 
-
+// Animatie mana
 float animationProgress = 0.0f;
 const float animationDuration = 1.5f;
 bool isAnimatingForward = false;
 bool isAnimatingBackward = false;
 int lastUpdateTime = 0;
 
+// Pozitia de baza a jucatorului/bratului
+float playerBaseX = 0.0f; // Jucatorul va fi centrat pe X pentru usurinta cu terenul
+float playerBaseY = 1.0f; // Inaltimea bazei bratului deasupra PODELEI (care va fi la Y=0)
+float playerBaseZ = 6.0f; // Jucatorul in terenul sau, aproape de linia de 3m
 
-float playerBaseX = 2.0f;
-float playerBaseY = 1.0f; 
-float playerBaseZ = 8.0f;
-
+// Keyframes pentru animatia mainii
 const int NUM_POSES = 5;
 const int NUM_JOINTS = 11;
 float keyframePoses[NUM_POSES][NUM_JOINTS] = {
@@ -45,21 +47,25 @@ float keyframePoses[NUM_POSES][NUM_JOINTS] = {
     {  PI / 10.0f, 0.0f,       PI / 6.0f, PI / 6.0f,  PI / 10.0f,0.0f,  PI / 6.0f, PI / 6.0f, -PI / 8.0f, PI / 10.0f,PI / 10.0f }
 };
 
+// Unghiuri curente pentru articulatiile mainii
 float currentShoulderY, currentShoulderZ, currentElbow;
 float currentWristPronation;
 float currentWristZ, currentWristY;
 float currentFingerKnuckle, currentFingerMid;
 float currentThumbBaseZ, currentThumbKnuckle, currentThumbMid;
 
+// Dimensiuni parti mana
 float armLength = 2.5f; float armWidth = 0.6f; float forearmLength = 2.0f; float forearmWidth = 0.5f;
 float palmLength = 1.2f; float palmWidth = 1.2f; float palmDepth = 0.3f;
 float fingerLength = 1.0f; float fingerWidth = 0.18f; float thumbLength = 0.7f; float thumbWidth = 0.20f;
 
+// Unghiuri pentru control manual (daca e cazul)
 float shoulderAngleZ = keyframePoses[0][1]; float shoulderAngleY = keyframePoses[0][0]; float elbowAngle = keyframePoses[0][2];
 float wristPronationAngle = keyframePoses[0][3]; float wristAngleZ = keyframePoses[0][4]; float wristAngleY = keyframePoses[0][5];
 float fingerAngles[5][2] = { {keyframePoses[0][6], keyframePoses[0][7]}, {keyframePoses[0][6], keyframePoses[0][7]}, {keyframePoses[0][6], keyframePoses[0][7]}, {keyframePoses[0][6], keyframePoses[0][7]}, {keyframePoses[0][9], keyframePoses[0][10]} };
 float thumbBaseAngleZ = keyframePoses[0][8];
 
+// Varfuri pentru un cub unitar (folosit pentru mana, pereti, fileu, linii)
 float cubeVertices[] = { -0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,-0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,0.5f,-0.5f,0.5f,0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,-0.5f,-0.5f,-0.5f,-0.5f,0.5f,0.5f,-0.5f,-0.5f,0.5f,-0.5f,0.5f };
 
 // Mingea
@@ -73,38 +79,49 @@ const float GRAVITY = 9.81f;
 int hitKeyframeIndex = 2;
 
 // Fileu
-glm::vec3 netPosition(0.0f, 0.0f, -6.0f);
-glm::vec3 netDimensions(18.0f, 2.43f, 0.2f);
+glm::vec3 netPosition(0.0f, 0.0f, 0.0f); // Y si Z vor fi ajustate in display relativ la podea si centrul terenului
+glm::vec3 netDimensions(9.0f, 2.43f, 0.1f); // Latime teren, Inaltime oficiala, Grosime fileu
 
 // Culori obiecte
 glm::vec3 handColor(0.96f, 0.76f, 0.62f);
 glm::vec3 ballColor(1.0f, 1.0f, 0.8f);
-glm::vec3 netColor(0.2f, 0.2f, 0.2f);
+glm::vec3 netColor(0.1f, 0.1f, 0.1f);
+glm::vec3 lineColor(1.0f, 1.0f, 1.0f);
 
-// Variabile pentru Sfera
+// Variabile pentru Sfera (mingea)
 GLuint sphereVao, sphereVbo, sphereIbo;
 std::vector<float> sphereVertices_data;
 std::vector<unsigned int> sphereIndices_data;
 int sphereStacks = 30;
 int sphereSlices = 30;
 
-// Variabile pentru Podea
+// Variabile pentru Podea (terenul de joc)
 GLuint floorVao, floorVbo, floorIbo;
 std::vector<float> floorVertices_data;
 std::vector<unsigned int> floorIndices_data;
-float floorW = 40.0f, floorH_thickness = 1.0f, floorD = 40.0f; // Dimensiuni podea
+float courtPlayingAreaW = 9.0f;
+float courtPlayingAreaL = 18.0f;
+float courtPlayingAreaThickness = 0.1f;
 
 // Variabile pentru Tavan
 GLuint ceilingVao, ceilingVbo, ceilingIbo;
 std::vector<float> ceilingVertices_data;
 std::vector<unsigned int> ceilingIndices_data;
-float ceilingW = 40.0f, ceilingH_thickness = 1.0f, ceilingD = 40.0f; // Dimensiuni tavan
+// Tavanul va acoperi o zona mai mare decat terenul
+float overallRoomW = 20.0f; // Latimea totala a salii
+float overallRoomL = 30.0f; // Lungimea totala a salii
+float ceilingH_thickness = 1.0f;
 
 
 // Culori pentru elementele salii
-glm::vec3 floorColor(0.3f, 0.4f, 0.3f);
+glm::vec3 courtOrangeColor(1.0f, 0.55f, 0.0f);
 glm::vec3 wallColor(0.8f, 0.8f, 0.75f);
 glm::vec3 ceilingColor(0.9f, 0.9f, 0.9f);
+
+// Dimensiuni Linii Teren
+const float LINE_WIDTH_DIM = 0.05f;
+const float LINE_THICKNESS_VISUAL_DIM = 0.02f;
+
 
 std::string textFileRead(const char* fn) { std::ifstream ifile(fn); if (!ifile.is_open()) { std::cerr << "Eroare la deschiderea fisierului: " << fn << std::endl; return ""; } std::string filetext; std::string line; while (std::getline(ifile, line)) { filetext.append(line + "\n"); } return filetext; }
 float lerp(float start, float end, float t_lerp) { t_lerp = glm::clamp(t_lerp, 0.0f, 1.0f); return start + t_lerp * (end - start); }
@@ -216,14 +233,16 @@ void update() {
     }
 
     if (ballIsServed) {
+        float floorLevel = 0.0f;
         if (ballInToss && !ballIsHit) {
             ballVelocity.y -= GRAVITY * deltaTime * 1.5f;
             ballPosition += ballVelocity * deltaTime;
             float hitProgressLowerBound = (float)hitKeyframeIndex - 0.15f;
             float hitProgressUpperBound = (float)hitKeyframeIndex + 0.15f;
             if (animationProgress >= hitProgressLowerBound && animationProgress <= hitProgressUpperBound) {
-                float approximateHitHeightMin = playerBaseY + armLength * 0.5f; 
-                float approximateHitHeightMax = playerBaseY + armLength + forearmLength + palmLength + ballRadius * 2.0f;
+                float actualPlayerArmBaseY = floorLevel + playerBaseY;
+                float approximateHitHeightMin = actualPlayerArmBaseY + armLength * 0.5f;
+                float approximateHitHeightMax = actualPlayerArmBaseY + armLength + forearmLength + palmLength + ballRadius * 2.0f;
                 if (ballPosition.y > approximateHitHeightMin && ballPosition.y < approximateHitHeightMax &&
                     abs(ballPosition.x - playerBaseX) < (palmWidth + forearmWidth + ballRadius) &&
                     abs(ballPosition.z - (playerBaseZ - palmLength)) < (palmLength + forearmLength + ballRadius)) {
@@ -232,20 +251,23 @@ void update() {
                     float targetXNetCenter = netPosition.x;
                     float deltaX = targetXNetCenter - ballPosition.x;
                     ballVelocity = glm::vec3(deltaX * 0.8f,
-                        9.0f + ((ballPosition.y - (playerBaseY + armLength)) * 0.5f),
-                        -15.0f - ((ballPosition.y - (playerBaseY + armLength)) * 1.0f));
+                        9.0f + ((ballPosition.y - (actualPlayerArmBaseY + armLength)) * 0.5f),
+                        -15.0f - ((ballPosition.y - (actualPlayerArmBaseY + armLength)) * 1.0f));
                     std::cout << "BALL HIT! Velocity: X=" << ballVelocity.x << " Y=" << ballVelocity.y << " Z=" << ballVelocity.z << std::endl;
                 }
             }
-            if (ballPosition.y < (0.0f - ballRadius) && !ballIsHit) {
+            if (ballPosition.y < (floorLevel + ballRadius) && !ballIsHit) {
                 ballInToss = false;
-                std::cout << "Ball missed or hit the floor before hit." << std::endl;
+                ballIsServed = false;
+                std::cout << "Ball hit the floor before being hit." << std::endl;
             }
         }
         else if (ballIsHit) {
             ballVelocity.y -= GRAVITY * deltaTime;
             ballPosition += ballVelocity * deltaTime;
-            if (ballPosition.y < (0.0f - ballRadius) || abs(ballPosition.x) >(netDimensions.x / 2.0f + 5.0f) || abs(ballPosition.z) > 25.0f) {
+            if (ballPosition.y < (floorLevel + ballRadius) ||
+                abs(ballPosition.x) >(courtPlayingAreaW / 2.0f + 2.0f) ||
+                abs(ballPosition.z) > (courtPlayingAreaL / 2.0f + 2.0f)) {
                 std::cout << "Ball out of bounds or on the floor after hit." << std::endl;
             }
         }
@@ -259,41 +281,81 @@ void display() {
     glUseProgram(shader_programme);
 
     float floorTopSurfaceY = 0.0f;
-    float ceilingBottomSurfaceY = 12.0f;
-    float wallThickness = 0.2f;
+    float ceilingBottomSurfaceY = 10.0f;
+    float wallVisualThickness = 0.2f;
 
-    // --- Podea ---
-    glm::mat4 floorModelMatrix = glm::mat4(1.0f);
-    floorModelMatrix = glm::translate(floorModelMatrix, glm::vec3(0.0f, floorTopSurfaceY - floorH_thickness / 2.0f, 0.0f));
-    drawGeneratedCuboid(floorVao, floorIbo, floorIndices_data.size(), floorModelMatrix, floorColor);
+    // --- Podea (Terenul Portocaliu) ---
+    glm::mat4 courtModelMatrix = glm::mat4(1.0f);
+    courtModelMatrix = glm::translate(courtModelMatrix, glm::vec3(0.0f, floorTopSurfaceY - courtPlayingAreaThickness / 2.0f, 0.0f));
+    drawGeneratedCuboid(floorVao, floorIbo, floorIndices_data.size(), courtModelMatrix, courtOrangeColor);
+
+    // --- Linii Teren ---
+    float linesYCenterPosition = floorTopSurfaceY + LINE_THICKNESS_VISUAL_DIM / 2.0f; // Liniile putin deasupra terenului
+    glm::mat4 lineModelMatrix;
+
+    // Linii Laterale (paralele cu Z, pe lungimea terenului)
+    lineModelMatrix = glm::mat4(1.0f);
+    lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3((courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
+    lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
+    drawCube(lineModelMatrix, lineColor);
+    lineModelMatrix = glm::mat4(1.0f);
+    lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(-(courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
+    lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
+    drawCube(lineModelMatrix, lineColor);
+
+    // Linii de Fund (paralele cu X, pe latimea terenului)
+    lineModelMatrix = glm::mat4(1.0f);
+    lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, (courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f));
+    lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(lineModelMatrix, lineColor);
+    lineModelMatrix = glm::mat4(1.0f);
+    lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, -(courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f));
+    lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(lineModelMatrix, lineColor);
+
+    // Linia de Centru (paralela cu X)
+    lineModelMatrix = glm::mat4(1.0f);
+    lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, 0.0f));
+    lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(lineModelMatrix, lineColor);
+
+    // Liniile de Atac (paralele cu X)
+    float attackLineOffsetFromCenter = 3.0f;
+    lineModelMatrix = glm::mat4(1.0f);
+    lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, attackLineOffsetFromCenter));
+    lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(lineModelMatrix, lineColor);
+    lineModelMatrix = glm::mat4(1.0f);
+    lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, -attackLineOffsetFromCenter));
+    lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(lineModelMatrix, lineColor);
 
     // --- Tavan ---
     glm::mat4 ceilingModelMatrix = glm::mat4(1.0f);
     ceilingModelMatrix = glm::translate(ceilingModelMatrix, glm::vec3(0.0f, ceilingBottomSurfaceY + ceilingH_thickness / 2.0f, 0.0f));
     drawGeneratedCuboid(ceilingVao, ceilingIbo, ceilingIndices_data.size(), ceilingModelMatrix, ceilingColor);
 
-    // --- Pereti ---
-    float roomHeight = ceilingBottomSurfaceY - floorTopSurfaceY;
-    float wallCenterY = floorTopSurfaceY + (roomHeight / 2.0f);
+    // --- Pereti (aliniati cu dimensiunile generale ale salii, nu doar cu terenul) ---
+    float roomVisualHeight = ceilingBottomSurfaceY - floorTopSurfaceY;
+    float wallCenterY = floorTopSurfaceY + (roomVisualHeight / 2.0f);
 
     // Perete Spate (Z negativ)
     glm::mat4 wallBackModelMatrix = glm::mat4(1.0f);
-    wallBackModelMatrix = glm::translate(wallBackModelMatrix, glm::vec3(0.0f, wallCenterY, -floorD / 2.0f));
-    wallBackModelMatrix = glm::scale(wallBackModelMatrix, glm::vec3(floorW, roomHeight, wallThickness));
+    wallBackModelMatrix = glm::translate(wallBackModelMatrix, glm::vec3(0.0f, wallCenterY, -overallRoomL / 2.0f));
+    wallBackModelMatrix = glm::scale(wallBackModelMatrix, glm::vec3(overallRoomW, roomVisualHeight, wallVisualThickness));
     drawCube(wallBackModelMatrix, wallColor);
 
     // Perete Stanga (X negativ)
     glm::mat4 wallLeftModelMatrix = glm::mat4(1.0f);
-    wallLeftModelMatrix = glm::translate(wallLeftModelMatrix, glm::vec3(-floorW / 2.0f, wallCenterY, 0.0f));
-    wallLeftModelMatrix = glm::scale(wallLeftModelMatrix, glm::vec3(wallThickness, roomHeight, floorD));
+    wallLeftModelMatrix = glm::translate(wallLeftModelMatrix, glm::vec3(-overallRoomW / 2.0f, wallCenterY, 0.0f));
+    wallLeftModelMatrix = glm::scale(wallLeftModelMatrix, glm::vec3(wallVisualThickness, roomVisualHeight, overallRoomL));
     drawCube(wallLeftModelMatrix, wallColor);
 
     // Perete Dreapta (X pozitiv)
     glm::mat4 wallRightModelMatrix = glm::mat4(1.0f);
-    wallRightModelMatrix = glm::translate(wallRightModelMatrix, glm::vec3(floorW / 2.0f, wallCenterY, 0.0f));
-    wallRightModelMatrix = glm::scale(wallRightModelMatrix, glm::vec3(wallThickness, roomHeight, floorD));
+    wallRightModelMatrix = glm::translate(wallRightModelMatrix, glm::vec3(overallRoomW / 2.0f, wallCenterY, 0.0f));
+    wallRightModelMatrix = glm::scale(wallRightModelMatrix, glm::vec3(wallVisualThickness, roomVisualHeight, overallRoomL));
     drawCube(wallRightModelMatrix, wallColor);
-
 
     // --- Fileu ---
     glm::mat4 netDisplayMatrix = glm::mat4(1.0f);
@@ -366,7 +428,7 @@ void init() {
     glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS); glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
     glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); } printf("Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
-    // VAO/VBO pentru cubul generic (mana, pereti, fileu)
+    // VAO/VBO pentru cubul generic (mana, pereti, fileu, linii)
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
@@ -387,8 +449,8 @@ void init() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0); glBindVertexArray(0);
 
-    // Podea
-    generateCuboidVertices(floorW, floorH_thickness, floorD, floorVertices_data, floorIndices_data);
+    // Podea (terenul de joc)
+    generateCuboidVertices(courtPlayingAreaW, courtPlayingAreaThickness, courtPlayingAreaL, floorVertices_data, floorIndices_data);
     glGenVertexArrays(1, &floorVao); glBindVertexArray(floorVao);
     glGenBuffers(1, &floorVbo); glBindBuffer(GL_ARRAY_BUFFER, floorVbo);
     glBufferData(GL_ARRAY_BUFFER, floorVertices_data.size() * sizeof(float), floorVertices_data.data(), GL_STATIC_DRAW);
@@ -398,7 +460,7 @@ void init() {
     glEnableVertexAttribArray(0); glBindVertexArray(0);
 
     // Tavan
-    generateCuboidVertices(ceilingW, ceilingH_thickness, ceilingD, ceilingVertices_data, ceilingIndices_data);
+    generateCuboidVertices(overallRoomW, ceilingH_thickness, overallRoomL, ceilingVertices_data, ceilingIndices_data); // Folosim dimensiunile salii
     glGenVertexArrays(1, &ceilingVao); glBindVertexArray(ceilingVao);
     glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo);
     glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data.size() * sizeof(float), ceilingVertices_data.data(), GL_STATIC_DRAW);
@@ -406,7 +468,6 @@ void init() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data.size() * sizeof(unsigned int), ceilingIndices_data.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0); glBindVertexArray(0);
-
 
     glBindBuffer(GL_ARRAY_BUFFER, 0); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
@@ -423,7 +484,7 @@ void init() {
     currentWristPronation = keyframePoses[0][3]; currentWristZ = keyframePoses[0][4]; currentWristY = keyframePoses[0][5];
     currentFingerKnuckle = keyframePoses[0][6]; currentFingerMid = keyframePoses[0][7];
     currentThumbBaseZ = keyframePoses[0][8]; currentThumbKnuckle = keyframePoses[0][9]; currentThumbMid = keyframePoses[0][10];
-    ballPosition = glm::vec3(playerBaseX, playerBaseY + 1.5f, playerBaseZ - 0.5f);
+    ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ - 1.0f); // Pozitie initiala minge
 }
 
 void keyboard(unsigned char key, int x, int y) {
@@ -434,8 +495,8 @@ void keyboard(unsigned char key, int x, int y) {
             isAnimatingForward = true; isAnimatingBackward = false; manualControl = false;
             animationProgress = 0.0f;
             ballIsServed = true; ballInToss = true; ballIsHit = false;
-            ballPosition = glm::vec3(playerBaseX - 0.2f, playerBaseY + 2.5f, playerBaseZ - 1.5f);
-            ballVelocity = glm::vec3(0.1f, 7.5f, -1.0f);
+            ballPosition = glm::vec3(playerBaseX - 0.2f, (0.0f + playerBaseY) + 2.0f, playerBaseZ - 1.5f);
+            ballVelocity = glm::vec3(0.1f, 7.0f, -1.0f);
             std::cout << "Serve initiated. Ball toss." << std::endl;
         }
         break;
@@ -443,7 +504,7 @@ void keyboard(unsigned char key, int x, int y) {
     case ' ':
         isAnimatingForward = false; isAnimatingBackward = false; animationProgress = 0.0f;
         ballIsServed = false; ballInToss = false; ballIsHit = false;
-        ballPosition = glm::vec3(playerBaseX, playerBaseY + 1.5f, playerBaseZ - 0.5f);
+        ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ - 0.5f);
         ballVelocity = glm::vec3(0.0f);
         currentShoulderY = keyframePoses[0][0]; currentShoulderZ = keyframePoses[0][1]; currentElbow = keyframePoses[0][2];
         currentWristPronation = keyframePoses[0][3]; currentWristZ = keyframePoses[0][4]; currentWristY = keyframePoses[0][5];
@@ -473,13 +534,14 @@ void reshape(int w, int h) {
     if (h == 0) h = 1; glViewport(0, 0, w, h);
     projectionMatrix = glm::perspective(glm::radians(50.0f), (float)w / h, 0.1f, 150.0f);
 
+    float cameraActualY = (0.0f + playerBaseY) + 2.0f;
     float cameraX = playerBaseX;
-    float cameraY = playerBaseY + 2.0f;
+    float cameraY = cameraActualY;
     float cameraZ = playerBaseZ + 10.0f;
 
     float lookAtX = playerBaseX;
-    float lookAtY = playerBaseY + 1.0f;
-    float lookAtZ = netPosition.z;
+    float lookAtY = cameraActualY - 1.0f;
+    float lookAtZ = 0.0f;
 
     viewMatrix = glm::lookAt(glm::vec3(cameraX, cameraY, cameraZ),
         glm::vec3(lookAtX, lookAtY, lookAtZ),
@@ -489,7 +551,7 @@ void reshape(int w, int h) {
 int main(int argc, char** argv) {
     glutInit(&argc, argv); glutInitDisplayMode(GLUT_RGB | GLUT_SINGLE | GLUT_DEPTH);
     glutInitWindowSize(1280, 720);
-    glutCreateWindow("Serviciu Volei OpenGL - Sala Corectata v2");
+    glutCreateWindow("Serviciu Volei OpenGL - Teren Volei v2");
     init();
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
