@@ -1,0 +1,6 @@
+﻿  main.cpp
+C:\SPG\ProiectSPG\SPGOpenGL\SPGOpenGL\main.cpp(173,57): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\SPG\ProiectSPG\SPGOpenGL\SPGOpenGL\main.cpp(184,34): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\SPG\ProiectSPG\SPGOpenGL\SPGOpenGL\main.cpp(199,19): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+C:\SPG\ProiectSPG\SPGOpenGL\SPGOpenGL\main.cpp(199,61): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+  SPGOpenGL.vcxproj -> C:\SPG\ProiectSPG\SPGOpenGL\x64\Debug\SPGOpenGL.exe
