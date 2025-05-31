@@ -15,7 +15,7 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/common.hpp>
-#include <glm/gtc/random.hpp> // Pentru glm::linearRand
+#include <glm/gtc/random.hpp> 
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -55,7 +55,7 @@ int lastUpdateTime = 0;
 float courtPlayingAreaW = 9.0f;
 float courtPlayingAreaL = 18.0f;
 float courtPlayingAreaThickness = 0.1f;
-float floorTopSurfaceY = 0.0f; // << DECLARATĂ AICI CA GLOBALĂ
+float floorTopSurfaceY = 0.0f; 
 
 // Pozitia de baza a jucatorului/bratului
 float playerBaseX = 0.0f;
@@ -347,7 +347,7 @@ void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices
 
     if (specificTextureID != netTextureID) {
         glUniform1i(isNetTextureID, GL_FALSE);
-    } // Altfel, isNetTextureID va fi setat corect înainte de a apela drawGeneratedCuboid pentru fileu
+    } 
 
 
     if (textureThisCuboid && specificTextureID != 0) {
@@ -421,7 +421,6 @@ void update() {
     currentThumbMid = lerp(keyframePoses[pose1_idx][10], keyframePoses[pose2_idx][10], t_lerp_val);
 
     if (ballIsServed) {
-        // float floorLevel = 0.0f; // Deja declarat global ca floorTopSurfaceY
         if (ballOnBezierPath) {
             bezierTime += deltaTime / bezierDuration;
             ballPosition = CalculateBezierPoint(glm::clamp(bezierTime, 0.0f, 1.0f), bezierP0, bezierP1, bezierP2, bezierP3);
@@ -492,13 +491,13 @@ void display() {
 
     if (enableLightingID_uniform != -1) glUniform1i(enableLightingID_uniform, 1);
 
-    //float floorTopSurfaceY = 0.0f; // Deja declarat global
+
     float generalFloorYPos = -0.05f;
     float ceilingBottomSurfaceY = 12.0f;
     float wallVisualThickness = 0.2f;
 
     glUniform1i(isNetTextureID, GL_FALSE);
-    glm::mat4 modelMatrix = glm::mat4(1.0f); // O singură matrice model pentru reutilizare
+    glm::mat4 modelMatrix = glm::mat4(1.0f); 
 
     // --- Podeaua Generală ---
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, generalFloorYPos - (0.05f / 2.0f), 0.0f));
