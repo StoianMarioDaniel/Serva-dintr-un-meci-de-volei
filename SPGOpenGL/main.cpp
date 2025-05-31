@@ -4,7 +4,7 @@
 #include <stack>
 #include <vector>
 #include <cmath>
-#include <stdio.h>
+#include <stdio.h> // Pentru glm::linearRand, desi <random> ar fi mai modern C++
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -15,9 +15,11 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/common.hpp>
+#include <glm/gtc/random.hpp> // Pentru glm::linearRand
 
 #define PI glm::pi<float>()
 
+// Shader, VAO/VBO pentru cub (TOATE cuburile vor folosi acest VAO/VBO)
 GLuint shader_programme, vao, vbo;
 glm::mat4 projectionMatrix, viewMatrix;
 // Uniform ID-uri
@@ -28,7 +30,7 @@ GLuint colorID;
 
 // Animatie mana
 float animationProgress = 0.0f;
-const float animationDuration = 1.5f;
+const float animationDuration = 1.5f; // Durata totala a animatiei mainii
 bool isAnimatingForward = false;
 bool isAnimatingBackward = false;
 int lastUpdateTime = 0;
@@ -48,13 +50,13 @@ float playerBaseZ = -(courtPlayingAreaL / 2.0f) - 1.5f;
 const int NUM_POSES = 5;
 const int NUM_JOINTS = 11;
 float keyframePoses[NUM_POSES][NUM_JOINTS] = {
-    {  0.05f,     PI / 7.0f,  PI / 2.5f, 0.0f,      0.0f,       0.0f,     PI / 4.0f, PI / 4.0f, -PI / 8.0f, PI / 5.0f, PI / 5.0f },
-    { -PI / 8.0f,  PI / 2.0f,  PI / 1.7f, 0.15f,    -PI / 3.5f,  0.0f,     PI / 7.0f, PI / 7.0f, -PI / 7.0f, PI / 6.0f, PI / 6.0f },
-    { -PI / 5.0f,  PI / 1.6f,  PI / 1.8f, 0.3f,     -PI / 2.8f,  0.05f,    PI / 9.0f, PI / 9.0f, -PI / 6.0f, PI / 7.0f, PI / 7.0f },
-    {  0.0f,      PI / 4.0f,  PI / 10.0f, PI / 2.0f,  PI / 3.0f,  0.0f,     0.0f,      0.0f,      -PI / 10.0f,0.0f,      0.0f },
-    {  PI / 6.0f, -PI / 5.0f, PI / 3.5f, PI / 2.5f,  PI / 7.0f,  0.0f,     PI / 5.0f, PI / 5.0f, -PI / 9.0f, PI / 7.0f, PI / 7.0f }
+    {  0.05f,     PI / 7.0f,  PI / 2.5f, 0.0f,      0.0f,       0.0f,     PI / 4.0f, PI / 4.0f, -PI / 8.0f, PI / 5.0f, PI / 5.0f }, // Pose 0: Initiala
+    { -PI / 8.0f,  PI / 2.0f,  PI / 1.7f, 0.15f,    -PI / 3.5f,  0.0f,     PI / 7.0f, PI / 7.0f, -PI / 7.0f, PI / 6.0f, PI / 6.0f }, // Pose 1: Backswing
+    { -PI / 5.0f,  PI / 1.6f,  PI / 1.8f, 0.3f,     -PI / 2.8f,  0.05f,    PI / 9.0f, PI / 9.0f, -PI / 6.0f, PI / 7.0f, PI / 7.0f }, // Pose 2: Peak backswing
+    {  0.0f,      PI / 4.0f,  PI / 10.0f, PI / 2.0f,  PI / 3.0f,  0.0f,     0.0f,      0.0f,      -PI / 10.0f,0.0f,      0.0f },      // Pose 3: HIT POSE (index 3)
+    {  PI / 6.0f, -PI / 5.0f, PI / 3.5f, PI / 2.5f,  PI / 7.0f,  0.0f,     PI / 5.0f, PI / 5.0f, -PI / 9.0f, PI / 7.0f, PI / 7.0f }  // Pose 4: Follow-through
 };
-int hitKeyframeIndex = 3;
+int hitKeyframeIndex = 3; // Indexul din keyframePoses unde se considera lovitura
 
 
 // Unghiuri curente pentru articulatiile mainii
@@ -74,12 +76,18 @@ float thumbWidth = 0.20f * 0.75f;
 
 // Varfuri pentru un cub unitar (Pozitie + Normala)
 float cubeVertices[] = {
+    // Spate
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,   0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,   0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,   0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+    // Fata
     -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,   0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,   0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,   0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+    // Stanga
     -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+    // Dreapta
      0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,   0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,   0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,   0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,   0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,   0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+     // Jos
+     -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,   0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+     // Sus
+     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,   0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
 };
 
 // Mingea
@@ -89,9 +97,16 @@ float ballRadius = 0.4f;
 bool ballIsServed = false; bool ballIsHit = false; bool ballInToss = false;
 const float GRAVITY = 9.81f;
 
+// Variabile pentru Curba Bezier a Mingii
+bool ballOnBezierPath = false;
+float bezierTime = 0.0f;
+const float bezierDuration = 1.1f; // Durata parcurgerii curbei in secunde (ajusteaza dupa nevoie)
+glm::vec3 bezierP0, bezierP1, bezierP2, bezierP3;
+
+
 // Fileu
 glm::vec3 netPosition(0.0f, 0.0f, 0.0f);
-glm::vec3 netDimensions(courtPlayingAreaW, 2.43f, 0.1f);
+glm::vec3 netDimensions(courtPlayingAreaW, 1.5f, 0.1f); // Inaltime standard fileu volei
 
 
 // Culori obiecte
@@ -182,17 +197,36 @@ void generateCuboidVertices(float width, float height, float depth, std::vector<
     vertices.clear(); indices.clear();
     float halfW = width / 2.0f; float halfH = height / 2.0f; float halfD = depth / 2.0f;
     vertices = {
-        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,   halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,   halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,
-        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,   halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,   halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,
-        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,   halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,   halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,
-        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,   halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,   halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,
-         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,   halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,   halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,   halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,
-        -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f
+        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,   halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,   halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f, // Fata
+        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,   halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,   halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f, // Spate
+        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,   halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,   halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f, // Sus
+        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,   halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,   halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f, // Jos
+         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,   halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,   halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,   halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f, // Dreapta
+        -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f  // Stanga
     };
     indices = {
-        0, 1, 2,   0, 2, 3,    4, 5, 6,   4, 6, 7,    8, 9, 10,  8, 10,11,
-        12,13,14,  12,14,15,   16,17,18,  16,18,19,   20,21,22,  20,22,23
+        0, 1, 2,   0, 2, 3,    // Fata
+        7, 6, 5,   7, 5, 4,    // Spate
+        8, 9, 10,  8, 10,11,   // Sus
+        15,14,13,  15,13,12,   // Jos
+        16,17,18,  16,18,19,   // Dreapta
+        23,22,21,  23,21,20    // Stanga
     };
+}
+
+glm::vec3 CalculateBezierPoint(float t, const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3) {
+    float u = 1.0f - t;
+    float tt = t * t;
+    float uu = u * u;
+    float uuu = uu * u;
+    float ttt = tt * t;
+
+    glm::vec3 point = uuu * p0;
+    point += 3.0f * uu * t * p1;
+    point += 3.0f * u * tt * p2;
+    point += ttt * p3;
+
+    return point;
 }
 
 
@@ -235,7 +269,6 @@ void update() {
     float totalAnimationRange = (float)(NUM_POSES - 1);
     float animationSpeed = totalAnimationRange / animationDuration;
 
-
     bool needsRedraw = false;
 
     if (isAnimatingForward) {
@@ -257,17 +290,9 @@ void update() {
 
     int pose1_idx = floor(animationProgress);
     int pose2_idx = ceil(animationProgress);
-
     pose1_idx = glm::clamp(pose1_idx, 0, NUM_POSES - 1);
     pose2_idx = glm::clamp(pose2_idx, 0, NUM_POSES - 1);
-
-    float t_lerp_val;
-    if (pose1_idx == pose2_idx) {
-        t_lerp_val = 0.0f;
-    }
-    else {
-        t_lerp_val = (animationProgress - (float)pose1_idx);
-    }
+    float t_lerp_val = (pose1_idx == pose2_idx) ? 0.0f : (animationProgress - (float)pose1_idx);
     t_lerp_val = glm::clamp(t_lerp_val, 0.0f, 1.0f);
 
     currentShoulderY = lerp(keyframePoses[pose1_idx][0], keyframePoses[pose2_idx][0], t_lerp_val);
@@ -284,46 +309,91 @@ void update() {
 
     if (ballIsServed) {
         float floorLevel = 0.0f;
-        if (ballInToss && !ballIsHit) {
-            ballVelocity.y -= GRAVITY * deltaTime * 1.5f; ballPosition += ballVelocity * deltaTime;
-            float hitMomentProgress = (float)hitKeyframeIndex;
-            if (animationProgress >= hitMomentProgress - 0.20f && animationProgress <= hitMomentProgress + 0.20f) {
-                float actualPlayerArmBaseY = floorLevel + playerBaseY;
-                glm::mat4 palmTransform = glm::mat4(1.0f);
-                palmTransform = glm::translate(palmTransform, glm::vec3(playerBaseX, actualPlayerArmBaseY, playerBaseZ));
-                palmTransform = glm::rotate(palmTransform, -PI / 2.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-                palmTransform = glm::rotate(palmTransform, currentShoulderY, glm::vec3(0.0f, 1.0f, 0.0f));
-                palmTransform = glm::rotate(palmTransform, currentShoulderZ, glm::vec3(0.0f, 0.0f, 1.0f));
-                palmTransform = glm::translate(palmTransform, glm::vec3(armLength, 0.0f, 0.0f));
-                palmTransform = glm::rotate(palmTransform, currentElbow, glm::vec3(0.0f, 0.0f, 1.0f));
-                palmTransform = glm::translate(palmTransform, glm::vec3(forearmLength, 0.0f, 0.0f));
-                palmTransform = glm::rotate(palmTransform, currentWristPronation, glm::vec3(1.0f, 0.0f, 0.0f));
-                palmTransform = glm::rotate(palmTransform, currentWristZ, glm::vec3(0.0f, 0.0f, 1.0f));
-                palmTransform = glm::rotate(palmTransform, currentWristY, glm::vec3(0.0f, 1.0f, 0.0f));
-                glm::vec3 palmGlobalCenter = glm::vec3(palmTransform * glm::vec4(palmLength / 2.0f, 0.0f, 0.0f, 1.0f));
-                if (glm::distance(ballPosition, palmGlobalCenter) < (palmLength * 0.7f + ballRadius)) {
-                    ballIsHit = true; ballInToss = false;
-                    float targetXNetCenter = netPosition.x; float deltaX = targetXNetCenter - ballPosition.x;
-                    ballVelocity = glm::vec3(deltaX * 0.1f,
-                        6.5f + ((ballPosition.y - (actualPlayerArmBaseY + armLength * 0.6f)) * 0.2f),
-                        14.0f + abs(playerBaseZ * 0.08f));
-                    std::cout << "BALL HIT! Vel: X=" << ballVelocity.x << " Y=" << ballVelocity.y << " Z=" << ballVelocity.z << std::endl;
-                }
+
+        if (ballOnBezierPath) {
+            bezierTime += deltaTime / bezierDuration;
+            ballPosition = CalculateBezierPoint(glm::clamp(bezierTime, 0.0f, 1.0f), bezierP0, bezierP1, bezierP2, bezierP3);
+
+            if (bezierTime >= 1.0f) {
+                ballOnBezierPath = false;
+                ballIsServed = false;
+                ballPosition.y = floorLevel + ballRadius;
+                std::cout << "Ball finished Bezier path (time)." << std::endl;
             }
-            if (ballPosition.y < (floorLevel + ballRadius) && !ballIsHit) {
-                ballInToss = false; ballIsServed = false;
-                isAnimatingForward = false;
-                std::cout << "Ball hit the floor before being hit. Hand animation stopped." << std::endl;
+            else if (ballPosition.y <= (floorLevel + ballRadius - 0.01f) && bezierTime < 1.0f) {
+                ballPosition.y = floorLevel + ballRadius;
             }
         }
-        else if (ballIsHit) {
-            ballVelocity.y -= GRAVITY * deltaTime; ballPosition += ballVelocity * deltaTime;
-            if (ballPosition.y < (floorLevel + ballRadius) || abs(ballPosition.x) >(courtPlayingAreaW / 2.0f + 3.0f) || abs(ballPosition.z) > (courtPlayingAreaL / 2.0f + 5.0f)) {
+        else if (ballInToss) {
+            ballVelocity.y -= GRAVITY * deltaTime * 1.25f; // Ajustat pentru o aruncare mai "plutitoare"
+            ballPosition += ballVelocity * deltaTime;
+
+            float hitMomentTriggerProgress = (float)hitKeyframeIndex;
+            float animationProgressCurrentFrame = animationProgress;
+
+            if (isAnimatingForward && animationProgressCurrentFrame >= hitMomentTriggerProgress && !ballIsHit) {
+                ballIsHit = true;
+                ballInToss = false;
+                ballOnBezierPath = true;
+                bezierTime = 0.0f;
+
+                bezierP0 = ballPosition;
+                if (bezierP0.y < floorLevel + ballRadius) {
+                    bezierP0.y = floorLevel + ballRadius;
+                }
+
+                float targetX = glm::linearRand(-courtPlayingAreaW / 2.0f + ballRadius + 0.7f, courtPlayingAreaW / 2.0f - ballRadius - 0.7f);
+                float targetZ = glm::linearRand(netDimensions.z + 2.0f, courtPlayingAreaL / 2.0f - ballRadius - 1.0f);
+                bezierP3 = glm::vec3(targetX, floorLevel + ballRadius, targetZ);
+
+                float netTopY = floorLevel + netDimensions.y;
+                float clearanceOverNet = 0.7f; // Redus putin
+                float controlPointBaseHeight = netTopY + clearanceOverNet;
+
+                float distP0P3_XZ = glm::distance(glm::vec2(bezierP0.x, bezierP0.z), glm::vec2(bezierP3.x, bezierP3.z));
+                float arcHeightFactor = distP0P3_XZ * 0.25f; // Redus pentru un arc mai plat initial
+
+                float p1_y_candidate = bezierP0.y + arcHeightFactor;
+                float p2_y_base_offset = (bezierP0.y > netTopY) ? arcHeightFactor * 0.6f : arcHeightFactor * 0.4f;
+                float p2_y_candidate = bezierP3.y + p2_y_base_offset;
+
+
+                bezierP1 = bezierP0 + glm::vec3((bezierP3.x - bezierP0.x) * 0.20f, 0.0f, (bezierP3.z - bezierP0.z) * 0.28f); // Ajustat
+                bezierP1.y = glm::max(controlPointBaseHeight, p1_y_candidate);
+
+                bezierP2 = bezierP3 + glm::vec3((bezierP0.x - bezierP3.x) * 0.20f, 0.0f, (bezierP0.z - bezierP3.z) * 0.28f); // Ajustat
+                bezierP2.y = glm::max(controlPointBaseHeight * 0.80f, p2_y_candidate); // Redus
+
+                if (abs(bezierP0.z - netPosition.z) < 1.8f && bezierP0.y < netTopY + 0.8f) {
+                    bezierP1.y = glm::max(bezierP1.y, bezierP0.y + 1.0f);
+                    bezierP2.y = glm::max(bezierP2.y, bezierP0.y + 0.8f);
+                }
+                if (bezierP0.y <= floorLevel + ballRadius + 0.1f) { // Daca e lovita de pe jos
+                    bezierP1.y = glm::max(bezierP1.y, floorLevel + ballRadius + 1.8f); // Ridica P1 mai mult
+                    bezierP2.y = glm::max(bezierP2.y, floorLevel + ballRadius + 1.5f); // Ridica P2 mai mult
+                }
+
+
+                std::cout << "TIMED HIT! Switching to Bezier Path." << std::endl;
+                std::cout << " P0: " << bezierP0.x << "," << bezierP0.y << "," << bezierP0.z
+                    << " P1: " << bezierP1.x << "," << bezierP1.y << "," << bezierP1.z
+                    << " P2: " << bezierP2.x << "," << bezierP2.y << "," << bezierP2.z
+                    << " P3: " << bezierP3.x << "," << bezierP3.y << "," << bezierP3.z << std::endl;
+            }
+
+            if (ballPosition.y < (floorLevel + ballRadius) && !ballIsHit) {
+                ballPosition.y = floorLevel + ballRadius;
+                ballVelocity.y = 0;
+                std::cout << "Ball on floor during toss. Waiting for timed hit." << std::endl;
             }
         }
         needsRedraw = true;
     }
-    glutPostRedisplay();
+
+
+    if (needsRedraw) {
+        glutPostRedisplay();
+    }
 }
 
 void display() {
@@ -378,9 +448,10 @@ void display() {
     netDisplayMatrix = glm::translate(netDisplayMatrix, glm::vec3(netPosition.x, floorTopSurfaceY + netDimensions.y / 2.0f, netPosition.z));
     netDisplayMatrix = glm::scale(netDisplayMatrix, netDimensions); drawCube(netDisplayMatrix, netColor);
 
-    if (ballIsServed || ballInToss || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
-        glm::mat4 ballModelMatrix = glm::mat4(1.0f); ballModelMatrix = glm::translate(ballModelMatrix, ballPosition);
-        drawSphere(ballModelMatrix, ballColor); 
+    if (ballIsServed || ballInToss || ballOnBezierPath || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
+        glm::mat4 ballModelMatrix = glm::mat4(1.0f);
+        ballModelMatrix = glm::translate(ballModelMatrix, ballPosition);
+        drawSphere(ballModelMatrix, ballColor);
     }
 
     glm::mat4 baseTransformMatrix = glm::mat4(1.0f);
@@ -437,39 +508,30 @@ void init() {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
-    // Sfera (mingea) 
     generateSphere();
     glGenVertexArrays(1, &sphereVao); glBindVertexArray(sphereVao);
-    glGenBuffers(1, &sphereVbo); glBindBuffer(GL_ARRAY_BUFFER, sphereVbo);
-    glBufferData(GL_ARRAY_BUFFER, sphereVertices_data.size() * sizeof(float), sphereVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &sphereIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices_data.size() * sizeof(unsigned int), sphereIndices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &sphereVbo); glBindBuffer(GL_ARRAY_BUFFER, sphereVbo); glBufferData(GL_ARRAY_BUFFER, sphereVertices_data.size() * sizeof(float), sphereVertices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &sphereIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices_data.size() * sizeof(unsigned int), sphereIndices_data.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
-    // Podea 
     generateCuboidVertices(courtPlayingAreaW, courtPlayingAreaThickness, courtPlayingAreaL, floorVertices_data, floorIndices_data);
     glGenVertexArrays(1, &floorVao); glBindVertexArray(floorVao);
-    glGenBuffers(1, &floorVbo); glBindBuffer(GL_ARRAY_BUFFER, floorVbo);
-    glBufferData(GL_ARRAY_BUFFER, floorVertices_data.size() * sizeof(float), floorVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &floorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, floorIbo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, floorIndices_data.size() * sizeof(unsigned int), floorIndices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &floorVbo); glBindBuffer(GL_ARRAY_BUFFER, floorVbo); glBufferData(GL_ARRAY_BUFFER, floorVertices_data.size() * sizeof(float), floorVertices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &floorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, floorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, floorIndices_data.size() * sizeof(unsigned int), floorIndices_data.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
-    // Tavan
     generateCuboidVertices(overallRoomW, ceilingH_thickness, overallRoomL, ceilingVertices_data, ceilingIndices_data);
     glGenVertexArrays(1, &ceilingVao); glBindVertexArray(ceilingVao);
-    glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo);
-    glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data.size() * sizeof(float), ceilingVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &ceilingIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ceilingIbo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data.size() * sizeof(unsigned int), ceilingIndices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo); glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data.size() * sizeof(float), ceilingVertices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &ceilingIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ceilingIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data.size() * sizeof(unsigned int), ceilingIndices_data.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
@@ -502,7 +564,7 @@ void init() {
     currentWristPronation = keyframePoses[0][3]; currentWristZ = keyframePoses[0][4]; currentWristY = keyframePoses[0][5];
     currentFingerKnuckle = keyframePoses[0][6]; currentFingerMid = keyframePoses[0][7];
     currentThumbBaseZ = keyframePoses[0][8]; currentThumbKnuckle = keyframePoses[0][9]; currentThumbMid = keyframePoses[0][10];
-    ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 0.3f);
+    ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f);
     updateCameraFront();
 }
 
@@ -517,9 +579,22 @@ void keyboard(unsigned char key, int x, int y) {
         }
     }
     switch (key) {
-    case 'j': if (!ballIsServed) { isAnimatingForward = true; isAnimatingBackward = false; animationProgress = 0.0f; ballIsServed = true; ballInToss = true; ballIsHit = false; ballPosition = glm::vec3(playerBaseX - 0.1f, (0.0f + playerBaseY) + 1.0f, playerBaseZ + 0.5f); ballVelocity = glm::vec3(0.05f, 7.5f, 1.5f); std::cout << "Serve initiated. Ball toss." << std::endl; } break;
+    case 'j':
+        if (!ballIsServed) {
+            isAnimatingForward = true;
+            isAnimatingBackward = false;
+            animationProgress = 0.0f;
+            ballIsServed = true;
+            ballInToss = true;
+            ballIsHit = false;
+            ballOnBezierPath = false;
+            ballPosition = glm::vec3(playerBaseX - 0.1f, (0.0f + playerBaseY) + 1.0f, playerBaseZ + 0.5f);
+            ballVelocity = glm::vec3(0.05f, 8.8f, 1.1f);
+            std::cout << "Serve initiated. Ball toss." << std::endl;
+        }
+        break;
     case 'K': isAnimatingBackward = true; isAnimatingForward = false; break;
-    case ' ': isAnimatingForward = false; isAnimatingBackward = false; animationProgress = 0.0f; ballIsServed = false; ballInToss = false; ballIsHit = false; ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 0.3f); ballVelocity = glm::vec3(0.0f); if (contactKeyframeOriginalsStored && hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) { keyframePoses[hitKeyframeIndex][3] = originalContactWristPronation; keyframePoses[hitKeyframeIndex][5] = originalContactWristY; } currentShoulderY = keyframePoses[0][0]; currentShoulderZ = keyframePoses[0][1]; currentElbow = keyframePoses[0][2]; currentWristPronation = keyframePoses[0][3]; currentWristZ = keyframePoses[0][4]; currentWristY = keyframePoses[0][5]; currentFingerKnuckle = keyframePoses[0][6]; currentFingerMid = keyframePoses[0][7]; currentThumbBaseZ = keyframePoses[0][8]; currentThumbKnuckle = keyframePoses[0][9]; currentThumbMid = keyframePoses[0][10]; std::cout << "Animation Reset. Contact keyframe restored." << std::endl; break;
+    case ' ': isAnimatingForward = false; isAnimatingBackward = false; animationProgress = 0.0f; ballIsServed = false; ballInToss = false; ballIsHit = false; ballOnBezierPath = false; bezierTime = 0.0f; ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f); ballVelocity = glm::vec3(0.0f); if (contactKeyframeOriginalsStored && hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) { keyframePoses[hitKeyframeIndex][3] = originalContactWristPronation; keyframePoses[hitKeyframeIndex][5] = originalContactWristY; } currentShoulderY = keyframePoses[0][0]; currentShoulderZ = keyframePoses[0][1]; currentElbow = keyframePoses[0][2]; currentWristPronation = keyframePoses[0][3]; currentWristZ = keyframePoses[0][4]; currentWristY = keyframePoses[0][5]; currentFingerKnuckle = keyframePoses[0][6]; currentFingerMid = keyframePoses[0][7]; currentThumbBaseZ = keyframePoses[0][8]; currentThumbKnuckle = keyframePoses[0][9]; currentThumbMid = keyframePoses[0][10]; std::cout << "Animation Reset. Contact keyframe restored." << std::endl; break;
 
     case 'w': cameraPos += cameraSpeed * cameraFront; break;
     case 's': cameraPos -= cameraSpeed * cameraFront; break;
@@ -554,7 +629,7 @@ void reshape(int w, int h) {
 int main(int argc, char** argv) {
     glutInit(&argc, argv); glutInitDisplayMode(GLUT_RGB | GLUT_SINGLE | GLUT_DEPTH);
     glutInitWindowSize(1280, 720);
-    glutCreateWindow("Serviciu Volei OpenGL - Iluminare Corecta Mana");
+    glutCreateWindow("Serviciu Volei OpenGL - Bezier Path");
     init();
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
