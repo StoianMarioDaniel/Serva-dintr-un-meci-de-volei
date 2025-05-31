@@ -4,7 +4,7 @@
 #include <stack>
 #include <vector>
 #include <cmath>
-#include <stdio.h> // Pentru glm::linearRand, desi <random> ar fi mai modern C++
+#include <stdio.h> 
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -18,7 +18,7 @@
 #include <glm/gtc/random.hpp> // Pentru glm::linearRand
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h" 
+#include "stb_image.h"
 
 #define PI glm::pi<float>()
 
@@ -32,10 +32,11 @@ GLuint projectionMatrixID_uniform;
 GLuint colorID;
 GLuint textureSamplerID;
 GLuint useTextureID;
-GLuint floorWoodTextureID;    // Pentru textura de lemn a podelei generale (sub teren)
-// GLuint courtTextureID; // Nu este folosit momentan, terenul e portocaliu
-GLuint wallTextureID;         // Pentru noua textura a peretilor
-GLuint ceilingTextureID;      // Pentru noua textura a tavanului
+GLuint isNetTextureID;
+GLuint floorWoodTextureID;
+GLuint wallTextureID;
+GLuint ceilingTextureID;
+GLuint netTextureID;
 
 // VAO/VBO pentru podeaua generala a camerei
 GLuint generalFloorVao, generalFloorVbo, generalFloorIbo;
@@ -54,6 +55,7 @@ int lastUpdateTime = 0;
 float courtPlayingAreaW = 9.0f;
 float courtPlayingAreaL = 18.0f;
 float courtPlayingAreaThickness = 0.1f;
+float floorTopSurfaceY = 0.0f; // << DECLARATĂ AICI CA GLOBALĂ
 
 // Pozitia de baza a jucatorului/bratului
 float playerBaseX = 0.0f;
@@ -150,16 +152,28 @@ float bezierTime = 0.0f;
 const float bezierDuration = 1.1f;
 glm::vec3 bezierP0, bezierP1, bezierP2, bezierP3;
 
+// For showing Bezier path
+bool showBezierPath = false;
+GLuint bezierCurveVao, bezierCurveVbo;
+GLuint enableLightingID_uniform;
+
 
 // Fileu
 glm::vec3 netPosition(0.0f, 0.0f, 0.0f);
-glm::vec3 netDimensions(courtPlayingAreaW, 1.5f, 0.1f);
+float netActualHeight = 1.0f;
+float netThickness = 0.02f;
+float netBaseElevation = 0.8f;
+
+// Stâlpi Fileu
+float netPoleHeight = netBaseElevation + netActualHeight + 0.05f;
+float netPoleRadius = 0.05f;
+glm::vec3 netPoleColor(0.3f, 0.3f, 0.3f);
+glm::vec3 netMeshColor(1.0f, 1.0f, 1.0f);
 
 
 // Culori obiecte
 glm::vec3 handColor(0.96f, 0.76f, 0.62f);
 glm::vec3 ballColor(1.0f, 1.0f, 0.8f);
-glm::vec3 netColor(0.1f, 0.1f, 0.1f);
 glm::vec3 lineColor(1.0f, 1.0f, 1.0f);
 
 // Sfera (mingea)
@@ -168,7 +182,7 @@ std::vector<float> sphereVertices_data; std::vector<unsigned int> sphereIndices_
 int sphereStacks = 30; int sphereSlices = 30;
 
 // Teren de joc (cel portocaliu)
-GLuint courtFloorVao, courtFloorVbo, courtFloorIbo; // Redenumit pentru claritate
+GLuint courtFloorVao, courtFloorVbo, courtFloorIbo;
 std::vector<float> courtFloorVertices_data;
 std::vector<unsigned int> courtFloorIndices_data;
 
@@ -228,41 +242,24 @@ GLuint loadTexture(const char* path) {
     glGenTextures(1, &textureID);
 
     int width, height, nrComponents;
-    //stbi_set_flip_vertically_on_load(true); 
+    stbi_set_flip_vertically_on_load(true);
     unsigned char* data = stbi_load(path, &width, &height, &nrComponents, 0);
     if (data) {
-        GLenum format, internalFormat;
-        if (nrComponents == 1) {
-            format = GL_RED;
-            internalFormat = GL_R8;
-        }
-        else if (nrComponents == 3) {
-            format = GL_RGB;
-            internalFormat = GL_RGB8;
-        }
-        else if (nrComponents == 4) {
-            format = GL_RGBA;
-            internalFormat = GL_RGBA8;
-        }
-        else {
-            format = GL_RGB;
-            internalFormat = GL_RGB8;
-            std::cerr << "Texture '" << path << "' loaded with " << nrComponents << " components. Defaulting to RGB/RGB8." << std::endl;
-        }
+        GLenum format = GL_RGB, internalFormat = GL_RGB8;
+        if (nrComponents == 1) { format = GL_RED; internalFormat = GL_R8; }
+        else if (nrComponents == 3) { format = GL_RGB; internalFormat = GL_RGB8; }
+        else if (nrComponents == 4) { format = GL_RGBA; internalFormat = GL_RGBA8; }
+        else { std::cerr << "Texture '" << path << "' loaded with " << nrComponents << " components. Defaulting to RGB/RGB8." << std::endl; }
 
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1); // Important pentru unele texturi
-
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glBindTexture(GL_TEXTURE_2D, textureID);
         glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // Reseteaza la default
-
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
         stbi_image_free(data);
         std::cout << "Texture loaded successfully: " << path << std::endl;
     }
@@ -302,66 +299,28 @@ void generateCuboidVertices(float width, float height, float depth, std::vector<
     vertices.clear(); indices.clear();
     float halfW = width / 2.0f; float halfH = height / 2.0f; float halfD = depth / 2.0f;
     vertices = {
-        // Poziții          // Normale           // Coordonate Textură
-        // Fata (Z+)
-        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f,
-         halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f,
-         halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f,
-        -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
-        // Spate (Z-)
-        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 0.0f,
-         halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 0.0f,
-         halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 1.0f,
-        -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 1.0f,
-        // Sus (Y+)
-        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  0.0f, depth / (depth + width), // Ajustat pentru mapare mai buna pe podea/tavan
-         halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  width / (depth + width), depth / (depth + width),
-         halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  width / (depth + width), 0.0f,
-        -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
-        // Jos (Y-) - Aceasta va fi fata vizibila a podelei generale si a terenului
-        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  0.0f, 1.0f, // Coordonate textură pentru o podea/tavan standard
-         halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  1.0f, 1.0f,
-         halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  1.0f, 0.0f,
-        -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  0.0f, 0.0f,
-        // Dreapta (X+)
-         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,  depth / (depth + height), 0.0f,
-         halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-         halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, height / (depth + height),
-         halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,  depth / (depth + height), height / (depth + height),
-         // Stanga (X-)
-         -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-         -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  depth / (depth + height), 0.0f,
-         -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  depth / (depth + height), height / (depth + height),
-         -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, height / (depth + height)
+        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f, halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f, halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f, -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
+        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 0.0f, halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 0.0f, halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 1.0f, -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 1.0f,
+        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  0.0f, 1.0f, halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f, halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f, -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
+        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  0.0f, 1.0f, halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  1.0f, 1.0f, halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  1.0f, 0.0f, -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  0.0f, 0.0f,
+         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f, halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f, halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f, halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+         -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f, -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 0.0f, -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 1.0f, -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 1.0f
     };
     indices = {
-        0, 1, 2,   0, 2, 3,    // Fata
-        4, 5, 6,   4, 6, 7,    // Spate
-        8, 9, 10,  8, 10,11,   // Sus
-        12,13,14,  12,14,15,   // Jos
-        16,17,18,  16,18,19,   // Dreapta
-        20,21,22,  20,22,23    // Stanga
+        0, 1, 2,   0, 2, 3, 4, 5, 6,   4, 6, 7, 8, 9, 10,  8, 10,11, 12,13,14,  12,14,15, 16,17,18,  16,18,19, 20,21,22,  20,22,23
     };
 }
 
 
 glm::vec3 CalculateBezierPoint(float t, const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3) {
-    float u = 1.0f - t;
-    float tt = t * t;
-    float uu = u * u;
-    float uuu = uu * u;
-    float ttt = tt * t;
-
-    glm::vec3 point = uuu * p0;
-    point += 3.0f * uu * t * p1;
-    point += 3.0f * u * tt * p2;
-    point += ttt * p3;
-
+    float u = 1.0f - t; float tt = t * t; float uu = u * u; float uuu = uu * u; float ttt = tt * t;
+    glm::vec3 point = uuu * p0; point += 3.0f * uu * t * p1; point += 3.0f * u * tt * p2; point += ttt * p3;
     return point;
 }
 
 
 void drawCube(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
+    glUniform1i(isNetTextureID, GL_FALSE);
     glUniform1i(useTextureID, 0);
     glUniform3fv(colorID, 1, glm::value_ptr(color));
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
@@ -371,6 +330,7 @@ void drawCube(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
 }
 
 void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
+    glUniform1i(isNetTextureID, GL_FALSE);
     glUniform1i(useTextureID, 0);
     glUniform3fv(colorID, 1, glm::value_ptr(color));
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
@@ -384,6 +344,12 @@ void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
 void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices,
     const glm::mat4& modelMatrixIn, const glm::vec3& fallbackColor,
     bool textureThisCuboid, GLuint specificTextureID) {
+
+    if (specificTextureID != netTextureID) {
+        glUniform1i(isNetTextureID, GL_FALSE);
+    } // Altfel, isNetTextureID va fi setat corect înainte de a apela drawGeneratedCuboid pentru fileu
+
+
     if (textureThisCuboid && specificTextureID != 0) {
         glUniform1i(useTextureID, 1);
         glActiveTexture(GL_TEXTURE0);
@@ -400,6 +366,9 @@ void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices
     glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    if (textureThisCuboid && specificTextureID != 0) {
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 }
 
 
@@ -452,99 +421,63 @@ void update() {
     currentThumbMid = lerp(keyframePoses[pose1_idx][10], keyframePoses[pose2_idx][10], t_lerp_val);
 
     if (ballIsServed) {
-        float floorLevel = 0.0f;
-
+        // float floorLevel = 0.0f; // Deja declarat global ca floorTopSurfaceY
         if (ballOnBezierPath) {
             bezierTime += deltaTime / bezierDuration;
             ballPosition = CalculateBezierPoint(glm::clamp(bezierTime, 0.0f, 1.0f), bezierP0, bezierP1, bezierP2, bezierP3);
-
             if (bezierTime >= 1.0f) {
-                ballOnBezierPath = false;
-                ballIsServed = false;
-                ballPosition.y = floorLevel + ballRadius;
+                ballOnBezierPath = false; ballIsServed = false; ballPosition.y = floorTopSurfaceY + ballRadius;
                 std::cout << "Ball finished Bezier path (time)." << std::endl;
             }
-            else if (ballPosition.y <= (floorLevel + ballRadius - 0.01f) && bezierTime < 1.0f) {
-                ballPosition.y = floorLevel + ballRadius;
+            else if (ballPosition.y <= (floorTopSurfaceY + ballRadius - 0.01f) && bezierTime < 1.0f) {
+                ballPosition.y = floorTopSurfaceY + ballRadius;
             }
         }
         else if (ballInToss) {
-            ballVelocity.y -= GRAVITY * deltaTime * 1.25f;
-            ballPosition += ballVelocity * deltaTime;
-
-            float hitMomentTriggerProgress = (float)hitKeyframeIndex;
-            float animationProgressCurrentFrame = animationProgress;
-
+            ballVelocity.y -= GRAVITY * deltaTime * 1.25f; ballPosition += ballVelocity * deltaTime;
+            float hitMomentTriggerProgress = (float)hitKeyframeIndex; float animationProgressCurrentFrame = animationProgress;
             if (isAnimatingForward && animationProgressCurrentFrame >= hitMomentTriggerProgress && !ballIsHit) {
-                ballIsHit = true;
-                ballInToss = false;
-                ballOnBezierPath = true;
-                bezierTime = 0.0f;
-
-                bezierP0 = ballPosition;
-                if (bezierP0.y < floorLevel + ballRadius) {
-                    bezierP0.y = floorLevel + ballRadius;
-                }
-
+                ballIsHit = true; ballInToss = false; ballOnBezierPath = true; bezierTime = 0.0f;
+                bezierP0 = ballPosition; if (bezierP0.y < floorTopSurfaceY + ballRadius) { bezierP0.y = floorTopSurfaceY + ballRadius; }
                 float targetX = glm::linearRand(-courtPlayingAreaW / 2.0f + ballRadius + 0.7f, courtPlayingAreaW / 2.0f - ballRadius - 0.7f);
-                float targetZ = glm::linearRand(netDimensions.z + 2.0f, courtPlayingAreaL / 2.0f - ballRadius - 1.0f);
-                bezierP3 = glm::vec3(targetX, floorLevel + ballRadius, targetZ);
-
-                float netTopY = floorLevel + netDimensions.y;
-                float clearanceOverNet = 0.7f;
-                float controlPointBaseHeight = netTopY + clearanceOverNet;
-
+                float targetZ = glm::linearRand(netPosition.z + 2.0f, courtPlayingAreaL / 2.0f - ballRadius - 1.0f);
+                bezierP3 = glm::vec3(targetX, floorTopSurfaceY + ballRadius, targetZ);
+                float netTopVisibleY = floorTopSurfaceY + netBaseElevation + netActualHeight;
+                float clearanceOverNet = 0.7f; float controlPointBaseHeight = netTopVisibleY + clearanceOverNet;
                 float distP0P3_XZ = glm::distance(glm::vec2(bezierP0.x, bezierP0.z), glm::vec2(bezierP3.x, bezierP3.z));
                 float arcHeightFactor = distP0P3_XZ * 0.25f;
-
                 float p1_y_candidate = bezierP0.y + arcHeightFactor;
-                float p2_y_base_offset = (bezierP0.y > netTopY) ? arcHeightFactor * 0.6f : arcHeightFactor * 0.4f;
+                float p2_y_base_offset = (bezierP0.y > netTopVisibleY) ? arcHeightFactor * 0.6f : arcHeightFactor * 0.4f;
                 float p2_y_candidate = bezierP3.y + p2_y_base_offset;
-
-
                 bezierP1 = bezierP0 + glm::vec3((bezierP3.x - bezierP0.x) * 0.20f, 0.0f, (bezierP3.z - bezierP0.z) * 0.28f);
                 bezierP1.y = glm::max(controlPointBaseHeight, p1_y_candidate);
-
                 bezierP2 = bezierP3 + glm::vec3((bezierP0.x - bezierP3.x) * 0.20f, 0.0f, (bezierP0.z - bezierP3.z) * 0.28f);
                 bezierP2.y = glm::max(controlPointBaseHeight * 0.80f, p2_y_candidate);
-
-                if (abs(bezierP0.z - netPosition.z) < 1.8f && bezierP0.y < netTopY + 0.8f) {
-                    bezierP1.y = glm::max(bezierP1.y, bezierP0.y + 1.0f);
-                    bezierP2.y = glm::max(bezierP2.y, bezierP0.y + 0.8f);
+                if (abs(bezierP0.z - netPosition.z) < 1.8f && bezierP0.y < netTopVisibleY + 0.8f) {
+                    bezierP1.y = glm::max(bezierP1.y, bezierP0.y + 1.0f); bezierP2.y = glm::max(bezierP2.y, bezierP0.y + 0.8f);
                 }
-                if (bezierP0.y <= floorLevel + ballRadius + 0.1f) {
-                    bezierP1.y = glm::max(bezierP1.y, floorLevel + ballRadius + 1.8f);
-                    bezierP2.y = glm::max(bezierP2.y, floorLevel + ballRadius + 1.5f);
+                if (bezierP0.y <= floorTopSurfaceY + ballRadius + 0.1f) {
+                    bezierP1.y = glm::max(bezierP1.y, floorTopSurfaceY + ballRadius + 1.8f); bezierP2.y = glm::max(bezierP2.y, floorTopSurfaceY + ballRadius + 1.5f);
                 }
-
-
                 std::cout << "TIMED HIT! Switching to Bezier Path." << std::endl;
-                std::cout << " P0: " << bezierP0.x << "," << bezierP0.y << "," << bezierP0.z
-                    << " P1: " << bezierP1.x << "," << bezierP1.y << "," << bezierP1.z
-                    << " P2: " << bezierP2.x << "," << bezierP2.y << "," << bezierP2.z
-                    << " P3: " << bezierP3.x << "," << bezierP3.y << "," << bezierP3.z << std::endl;
+                std::cout << " P0: " << bezierP0.x << "," << bezierP0.y << "," << bezierP0.z << " P1: " << bezierP1.x << "," << bezierP1.y << "," << bezierP1.z << " P2: " << bezierP2.x << "," << bezierP2.y << "," << bezierP2.z << " P3: " << bezierP3.x << "," << bezierP3.y << "," << bezierP3.z << std::endl;
             }
-
-            if (ballPosition.y < (floorLevel + ballRadius) && !ballIsHit) {
-                ballPosition.y = floorLevel + ballRadius;
-                ballVelocity.y = 0;
+            if (ballPosition.y < (floorTopSurfaceY + ballRadius) && !ballIsHit) {
+                ballPosition.y = floorTopSurfaceY + ballRadius; ballVelocity.y = 0;
                 std::cout << "Ball on floor during toss. Waiting for timed hit." << std::endl;
             }
         }
         needsRedraw = true;
     }
 
-
-    if (needsRedraw) {
-        glutPostRedisplay();
-    }
+    if (needsRedraw) { glutPostRedisplay(); }
 }
 
 void display() {
     updateCameraFront();
     viewMatrix = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Fundal negru pentru a vedea podeaua generala
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glUseProgram(shader_programme);
 
@@ -557,42 +490,61 @@ void display() {
     glUniformMatrix4fv(viewMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(viewMatrix));
     glUniformMatrix4fv(projectionMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
 
-    float floorTopSurfaceY = 0.0f;
-    float generalFloorYPos = -0.05f; // Putin sub terenul de joc principal
+    if (enableLightingID_uniform != -1) glUniform1i(enableLightingID_uniform, 1);
+
+    //float floorTopSurfaceY = 0.0f; // Deja declarat global
+    float generalFloorYPos = -0.05f;
     float ceilingBottomSurfaceY = 12.0f;
     float wallVisualThickness = 0.2f;
 
+    glUniform1i(isNetTextureID, GL_FALSE);
+    glm::mat4 modelMatrix = glm::mat4(1.0f); // O singură matrice model pentru reutilizare
 
-    // 1. Podeaua Generala a Camerei (texturata cu lemn)
-    glm::mat4 generalFloorModelMatrix = glm::mat4(1.0f);
-    generalFloorModelMatrix = glm::translate(generalFloorModelMatrix, glm::vec3(0.0f, generalFloorYPos - (0.05f / 2.0f), 0.0f));
-    drawGeneratedCuboid(generalFloorVao, generalFloorIbo, generalFloorIndices_data.size(), generalFloorModelMatrix, generalFloorFallbackColor, true, floorWoodTextureID);
+    // --- Podeaua Generală ---
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, generalFloorYPos - (0.05f / 2.0f), 0.0f));
+    drawGeneratedCuboid(generalFloorVao, generalFloorIbo, generalFloorIndices_data.size(), modelMatrix, generalFloorFallbackColor, true, floorWoodTextureID);
 
+    // --- Terenul de Joc ---
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, floorTopSurfaceY - courtPlayingAreaThickness / 2.0f, 0.0f));
+    drawGeneratedCuboid(courtFloorVao, courtFloorIbo, courtFloorIndices_data.size(), modelMatrix, courtOrangeColor, false, 0);
 
-    // 2. Terenul de joc portocaliu (netexturat)
-    glm::mat4 courtModelMatrix = glm::mat4(1.0f);
-    courtModelMatrix = glm::translate(courtModelMatrix, glm::vec3(0.0f, floorTopSurfaceY - courtPlayingAreaThickness / 2.0f, 0.0f));
-    drawGeneratedCuboid(courtFloorVao, courtFloorIbo, courtFloorIndices_data.size(), courtModelMatrix, courtOrangeColor, false, 0);
-
-
-    // 3. Liniile terenului (albe, fara textura)
+    // --- Liniile Terenului ---
     float linesYCenterPosition = floorTopSurfaceY + LINE_THICKNESS_VISUAL_DIM / 2.0f;
-    glm::mat4 lineModelMatrix;
-    lineModelMatrix = glm::mat4(1.0f); lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3((courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f)); lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL)); drawCube(lineModelMatrix, lineColor);
-    lineModelMatrix = glm::mat4(1.0f); lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(-(courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f)); lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL)); drawCube(lineModelMatrix, lineColor);
-    lineModelMatrix = glm::mat4(1.0f); lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, (courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f)); lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM)); drawCube(lineModelMatrix, lineColor);
-    lineModelMatrix = glm::mat4(1.0f); lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, -(courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f)); lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM)); drawCube(lineModelMatrix, lineColor);
-    lineModelMatrix = glm::mat4(1.0f); lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, 0.0f)); lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM)); drawCube(lineModelMatrix, lineColor);
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3((courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
+    drawCube(modelMatrix, lineColor);
+
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-(courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
+    drawCube(modelMatrix, lineColor);
+
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, (courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(modelMatrix, lineColor);
+
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, -(courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(modelMatrix, lineColor);
+
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, 0.0f)); // Linia de centru (sub fileu)
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(modelMatrix, lineColor);
+
     float attackLineOffsetFromCenter = 3.0f;
-    lineModelMatrix = glm::mat4(1.0f); lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, attackLineOffsetFromCenter)); lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM)); drawCube(lineModelMatrix, lineColor);
-    lineModelMatrix = glm::mat4(1.0f); lineModelMatrix = glm::translate(lineModelMatrix, glm::vec3(0.0f, linesYCenterPosition, -attackLineOffsetFromCenter)); lineModelMatrix = glm::scale(lineModelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM)); drawCube(lineModelMatrix, lineColor);
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, attackLineOffsetFromCenter));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(modelMatrix, lineColor);
 
-    // 4. Tavanul - texturat cu ceilingTextureID
-    glm::mat4 ceilingModelMatrix = glm::mat4(1.0f);
-    ceilingModelMatrix = glm::translate(ceilingModelMatrix, glm::vec3(0.0f, ceilingBottomSurfaceY + ceilingH_thickness / 2.0f, 0.0f));
-    drawGeneratedCuboid(ceilingVao, ceilingIbo, ceilingIndices_data.size(), ceilingModelMatrix, ceilingFallbackColor, true, ceilingTextureID);
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, -attackLineOffsetFromCenter));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
+    drawCube(modelMatrix, lineColor);
 
-    // 5. Peretii - texturati cu wallTextureID (folosind VAO-ul generic)
+    // --- Tavanul ---
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, ceilingBottomSurfaceY + ceilingH_thickness / 2.0f, 0.0f));
+    drawGeneratedCuboid(ceilingVao, ceilingIbo, ceilingIndices_data.size(), modelMatrix, ceilingFallbackColor, true, ceilingTextureID);
+
+    // --- Pereții ---
+    glUniform1i(isNetTextureID, GL_FALSE);
     if (wallTextureID != 0) {
         glUniform1i(useTextureID, 1);
         glActiveTexture(GL_TEXTURE0);
@@ -603,49 +555,86 @@ void display() {
         glUniform1i(useTextureID, 0);
         glUniform3fv(colorID, 1, glm::value_ptr(wallFallbackColor));
     }
-
     float roomVisualHeight = ceilingBottomSurfaceY - floorTopSurfaceY;
     float wallCenterY = floorTopSurfaceY + (roomVisualHeight / 2.0f);
 
-    glm::mat4 wallBackModelMatrix = glm::mat4(1.0f);
-    wallBackModelMatrix = glm::translate(wallBackModelMatrix, glm::vec3(0.0f, wallCenterY, -overallRoomL / 2.0f));
-    wallBackModelMatrix = glm::scale(wallBackModelMatrix, glm::vec3(overallRoomW, roomVisualHeight, wallVisualThickness));
-    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(wallBackModelMatrix));
-    glBindVertexArray(vao);
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, wallCenterY, -overallRoomL / 2.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(overallRoomW, roomVisualHeight, wallVisualThickness));
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrix));
+    glBindVertexArray(vao); glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-overallRoomW / 2.0f, wallCenterY, 0.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(wallVisualThickness, roomVisualHeight, overallRoomL));
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrix));
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
-    glm::mat4 wallLeftModelMatrix = glm::mat4(1.0f);
-    wallLeftModelMatrix = glm::translate(wallLeftModelMatrix, glm::vec3(-overallRoomW / 2.0f, wallCenterY, 0.0f));
-    wallLeftModelMatrix = glm::scale(wallLeftModelMatrix, glm::vec3(wallVisualThickness, roomVisualHeight, overallRoomL));
-    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(wallLeftModelMatrix));
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(overallRoomW / 2.0f, wallCenterY, 0.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(wallVisualThickness, roomVisualHeight, overallRoomL));
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrix));
     glDrawArrays(GL_TRIANGLES, 0, 36);
 
-    glm::mat4 wallRightModelMatrix = glm::mat4(1.0f);
-    wallRightModelMatrix = glm::translate(wallRightModelMatrix, glm::vec3(overallRoomW / 2.0f, wallCenterY, 0.0f));
-    wallRightModelMatrix = glm::scale(wallRightModelMatrix, glm::vec3(wallVisualThickness, roomVisualHeight, overallRoomL));
-    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(wallRightModelMatrix));
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-
-    glm::mat4 wallFrontModelMatrix = glm::mat4(1.0f);
-    wallFrontModelMatrix = glm::translate(wallFrontModelMatrix, glm::vec3(0.0f, wallCenterY, overallRoomL / 2.0f));
-    wallFrontModelMatrix = glm::scale(wallFrontModelMatrix, glm::vec3(overallRoomW, roomVisualHeight, wallVisualThickness));
-    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(wallFrontModelMatrix));
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, wallCenterY, overallRoomL / 2.0f));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(overallRoomW, roomVisualHeight, wallVisualThickness));
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrix));
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
+    if (wallTextureID != 0) { glBindTexture(GL_TEXTURE_2D, 0); }
 
+    if (enableLightingID_uniform != -1) glUniform1i(enableLightingID_uniform, 1);
 
-    // 6. Fileu, Minge, Mana - raman netexturate
-    glm::mat4 netDisplayMatrix = glm::mat4(1.0f);
-    netDisplayMatrix = glm::translate(netDisplayMatrix, glm::vec3(netPosition.x, floorTopSurfaceY + netDimensions.y / 2.0f, netPosition.z));
-    netDisplayMatrix = glm::scale(netDisplayMatrix, netDimensions);
-    drawCube(netDisplayMatrix, netColor);
+    // --- Fileul și Stâlpii ---
+    float netMeshCenterY = floorTopSurfaceY + netBaseElevation + (netActualHeight / 2.0f);
 
-    if (ballIsServed || ballInToss || ballOnBezierPath || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
-        glm::mat4 ballModelMatrix = glm::mat4(1.0f);
-        ballModelMatrix = glm::translate(ballModelMatrix, ballPosition);
-        drawSphere(ballModelMatrix, ballColor);
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(netPosition.x, netMeshCenterY, netPosition.z));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, netActualHeight, netThickness));
+
+    if (netTextureID != 0) {
+        glUniform1i(useTextureID, 1);
+        glUniform1i(isNetTextureID, GL_TRUE);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, netTextureID);
+        glUniform1i(textureSamplerID, 0);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glUniform3fv(colorID, 1, glm::value_ptr(netMeshColor));
+    }
+    else {
+        glUniform1i(useTextureID, 0);
+        glUniform1i(isNetTextureID, GL_FALSE);
+        glUniform3fv(colorID, 1, glm::value_ptr(netMeshColor));
+    }
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrix));
+    glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    if (netTextureID != 0) {
+        glDisable(GL_BLEND);
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
 
+    // Stâlpii fileului
+    glUniform1i(isNetTextureID, GL_FALSE);
+    glUniform1i(useTextureID, 0);
+
+    float poleCenterY = floorTopSurfaceY + (netPoleHeight / 2.0f);
+
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-courtPlayingAreaW / 2.0f - netPoleRadius, poleCenterY, netPosition.z));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(netPoleRadius, netPoleHeight, netPoleRadius));
+    drawCube(modelMatrix, netPoleColor);
+
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(courtPlayingAreaW / 2.0f + netPoleRadius, poleCenterY, netPosition.z));
+    modelMatrix = glm::scale(modelMatrix, glm::vec3(netPoleRadius, netPoleHeight, netPoleRadius));
+    drawCube(modelMatrix, netPoleColor);
+
+    glUniform1i(isNetTextureID, GL_FALSE);
+    glUniform1i(useTextureID, 0);
+
+    glUniform1i(isNetTextureID, GL_FALSE);
+    if (ballIsServed || ballInToss || ballOnBezierPath || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
+        modelMatrix = glm::translate(glm::mat4(1.0f), ballPosition);
+        drawSphere(modelMatrix, ballColor);
+    }
+
+    glUniform1i(isNetTextureID, GL_FALSE);
     glm::mat4 baseTransformMatrix = glm::mat4(1.0f);
     baseTransformMatrix = glm::translate(baseTransformMatrix, glm::vec3(playerBaseX, floorTopSurfaceY + playerBaseY, playerBaseZ));
     float initialArmYRotation = -PI / 2.0f;
@@ -685,14 +674,31 @@ void display() {
     glm::mat4 thumbKnuckleDrawMatrix = glm::translate(thumbKnuckleSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
     drawCube(glm::scale(thumbKnuckleDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor);
 
-
+    glUniform1i(isNetTextureID, GL_FALSE);
+    if (showBezierPath && ballOnBezierPath) {
+        if (enableLightingID_uniform != -1) glUniform1i(enableLightingID_uniform, 0);
+        glUniform1i(useTextureID, 0);
+        glm::mat4 pointModelMatrix; float controlPointSize = 0.15f;
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP0); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(1.0f, 0.0f, 0.0f));
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP1); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(0.0f, 1.0f, 0.0f));
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP2); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(0.0f, 0.0f, 1.0f));
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP3); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(1.0f, 1.0f, 0.0f));
+        std::vector<glm::vec3> curveVertices; const int numCurveSegments = 50;
+        for (int i = 0; i <= numCurveSegments; ++i) { float t = static_cast<float>(i) / static_cast<float>(numCurveSegments); curveVertices.push_back(CalculateBezierPoint(t, bezierP0, bezierP1, bezierP2, bezierP3)); }
+        glUniform3fv(colorID, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
+        glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+        glBindVertexArray(bezierCurveVao); glBindBuffer(GL_ARRAY_BUFFER, bezierCurveVbo);
+        glBufferData(GL_ARRAY_BUFFER, curveVertices.size() * sizeof(glm::vec3), curveVertices.data(), GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_LINE_STRIP, 0, curveVertices.size());
+        glBindVertexArray(0);
+        if (enableLightingID_uniform != -1) glUniform1i(enableLightingID_uniform, 1);
+    }
     glFlush();
 }
 
 void init() {
     const GLubyte* renderer = glGetString(GL_RENDERER); const GLubyte* version = glGetString(GL_VERSION); printf("Renderer: %s\n", renderer); printf("OpenGL version supported %s\n", version);
     glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS);
-    //glClearColor(0.1f, 0.1f, 0.2f, 1.0f); // Culoarea de clear nu mai e relevanta daca podeaua generala acopera tot
     glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); } printf("Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
     glGenBuffers(1, &vbo);
@@ -702,80 +708,53 @@ void init() {
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
     generateSphere();
     glGenVertexArrays(1, &sphereVao); glBindVertexArray(sphereVao);
     glGenBuffers(1, &sphereVbo); glBindBuffer(GL_ARRAY_BUFFER, sphereVbo); glBufferData(GL_ARRAY_BUFFER, sphereVertices_data.size() * sizeof(float), sphereVertices_data.data(), GL_STATIC_DRAW);
     glGenBuffers(1, &sphereIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices_data.size() * sizeof(unsigned int), sphereIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
-    // Terenul de joc (courtFloorVao)
     generateCuboidVertices(courtPlayingAreaW, courtPlayingAreaThickness, courtPlayingAreaL, courtFloorVertices_data, courtFloorIndices_data);
-    glGenVertexArrays(1, &courtFloorVao); glBindVertexArray(courtFloorVao); // Foloseste noul nume
+    glGenVertexArrays(1, &courtFloorVao); glBindVertexArray(courtFloorVao);
     glGenBuffers(1, &courtFloorVbo); glBindBuffer(GL_ARRAY_BUFFER, courtFloorVbo); glBufferData(GL_ARRAY_BUFFER, courtFloorVertices_data.size() * sizeof(float), courtFloorVertices_data.data(), GL_STATIC_DRAW);
     glGenBuffers(1, &courtFloorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, courtFloorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, courtFloorIndices_data.size() * sizeof(unsigned int), courtFloorIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
-    // Tavanul
     generateCuboidVertices(overallRoomW, ceilingH_thickness, overallRoomL, ceilingVertices_data, ceilingIndices_data);
     glGenVertexArrays(1, &ceilingVao); glBindVertexArray(ceilingVao);
     glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo); glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data.size() * sizeof(float), ceilingVertices_data.data(), GL_STATIC_DRAW);
     glGenBuffers(1, &ceilingIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ceilingIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data.size() * sizeof(unsigned int), ceilingIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
-    // Podeaua Generala a Camerei
-    float generalFloorThickness = 0.05f; // Grosime mica pentru podeaua generala
+    float generalFloorThickness = 0.05f;
     generateCuboidVertices(overallRoomW * 1.5f, generalFloorThickness, overallRoomL * 1.5f, generalFloorVertices_data, generalFloorIndices_data);
     glGenVertexArrays(1, &generalFloorVao); glBindVertexArray(generalFloorVao);
     glGenBuffers(1, &generalFloorVbo); glBindBuffer(GL_ARRAY_BUFFER, generalFloorVbo); glBufferData(GL_ARRAY_BUFFER, generalFloorVertices_data.size() * sizeof(float), generalFloorVertices_data.data(), GL_STATIC_DRAW);
     glGenBuffers(1, &generalFloorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, generalFloorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, generalFloorIndices_data.size() * sizeof(unsigned int), generalFloorIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
-
 
     glBindBuffer(GL_ARRAY_BUFFER, 0); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    floorWoodTextureID = loadTexture("wood_texture.jpg");
-    if (floorWoodTextureID == 0) {
-        fprintf(stderr, "Nu s-a putut incarca textura 'wood_texture.jpg' pentru podeaua generala.\n");
-    }
-    wallTextureID = loadTexture("new_wall_texture.jpg");
-    if (wallTextureID == 0) {
-        fprintf(stderr, "Nu s-a putut incarca textura 'new_wall_texture.jpg' pentru pereti.\n");
-    }
-    ceilingTextureID = loadTexture("ceiling_texture.jpg"); // Asigura-te ca ai acest fisier
-    if (ceilingTextureID == 0) {
-        fprintf(stderr, "Nu s-a putut incarca textura 'ceiling_texture.jpg' pentru tavan.\n");
-    }
-
+    floorWoodTextureID = loadTexture("wood_texture.jpg"); if (floorWoodTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'wood_texture.jpg' pentru podeaua generala.\n"); }
+    wallTextureID = loadTexture("new_wall_texture.jpg"); if (wallTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'new_wall_texture.jpg' pentru pereti.\n"); }
+    ceilingTextureID = loadTexture("ceiling_texture.jpg"); if (ceilingTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'ceiling_texture.jpg' pentru tavan.\n"); }
+    netTextureID = loadTexture("net_texture.jpg"); if (netTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'net_texture.jpg' pentru fileu.\n"); }
 
     std::string vstext = textFileRead("vertex.vert"); std::string fstext = textFileRead("fragment.frag"); if (vstext.empty() || fstext.empty()) { fprintf(stderr, "Eroare la citirea shaderelor.\n"); exit(1); }
     const char* vertex_shader_text = vstext.c_str(); const char* fragment_shader_text = fstext.c_str();
@@ -797,13 +776,21 @@ void init() {
     ambientColorID = glGetUniformLocation(shader_programme, "ambientColor");
     textureSamplerID = glGetUniformLocation(shader_programme, "textureSampler");
     useTextureID = glGetUniformLocation(shader_programme, "useTexture");
+    isNetTextureID = glGetUniformLocation(shader_programme, "isNetTexture");
+    if (isNetTextureID == -1) { std::cerr << "Warning: Uniform 'isNetTexture' not found in shader." << std::endl; }
+    enableLightingID_uniform = glGetUniformLocation(shader_programme, "enableLighting");
+    if (enableLightingID_uniform == -1) { std::cerr << "Warning: Uniform 'enableLighting' not found in shader." << std::endl; }
 
+    glGenVertexArrays(1, &bezierCurveVao); glGenBuffers(1, &bezierCurveVbo);
+    glBindVertexArray(bezierCurveVao); glBindBuffer(GL_ARRAY_BUFFER, bezierCurveVbo);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0); glBindVertexArray(0);
 
     currentShoulderY = keyframePoses[0][0]; currentShoulderZ = keyframePoses[0][1]; currentElbow = keyframePoses[0][2];
     currentWristPronation = keyframePoses[0][3]; currentWristZ = keyframePoses[0][4]; currentWristY = keyframePoses[0][5];
     currentFingerKnuckle = keyframePoses[0][6]; currentFingerMid = keyframePoses[0][7];
     currentThumbBaseZ = keyframePoses[0][8]; currentThumbKnuckle = keyframePoses[0][9]; currentThumbMid = keyframePoses[0][10];
-    ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f);
+    ballPosition = glm::vec3(playerBaseX, (floorTopSurfaceY + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f);
     updateCameraFront();
 }
 
@@ -817,32 +804,21 @@ void keyboard(unsigned char key, int x, int y) {
             contactKeyframeOriginalsStored = true;
         }
     }
-
-    bool cameraChanged = false; // Flag pentru a vedea daca s-a modificat camera
-
+    bool cameraChanged = false;
     switch (key) {
     case 'j':
         if (!ballIsServed) {
-            isAnimatingForward = true;
-            isAnimatingBackward = false;
-            animationProgress = 0.0f;
-            ballIsServed = true;
-            ballInToss = true;
-            ballIsHit = false;
-            ballOnBezierPath = false;
-            ballPosition = glm::vec3(playerBaseX - 0.1f, (0.0f + playerBaseY) + 1.0f, playerBaseZ + 0.5f);
+            isAnimatingForward = true; isAnimatingBackward = false; animationProgress = 0.0f;
+            ballIsServed = true; ballInToss = true; ballIsHit = false; ballOnBezierPath = false;
+            ballPosition = glm::vec3(playerBaseX - 0.1f, (floorTopSurfaceY + playerBaseY) + 1.0f, playerBaseZ + 0.5f);
             ballVelocity = glm::vec3(0.05f, 8.8f, 1.1f);
             std::cout << "Serve initiated. Ball toss." << std::endl;
-        }
-        break;
-    case 'K':
-        isAnimatingBackward = true;
-        isAnimatingForward = false;
-        break;
+        } break;
+    case 'K': isAnimatingBackward = true; isAnimatingForward = false; break;
     case ' ':
         isAnimatingForward = false; isAnimatingBackward = false; animationProgress = 0.0f;
         ballIsServed = false; ballInToss = false; ballIsHit = false; ballOnBezierPath = false; bezierTime = 0.0f;
-        ballPosition = glm::vec3(playerBaseX, (0.0f + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f);
+        ballPosition = glm::vec3(playerBaseX, (floorTopSurfaceY + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f);
         ballVelocity = glm::vec3(0.0f);
         if (contactKeyframeOriginalsStored && hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) {
             keyframePoses[hitKeyframeIndex][3] = originalContactWristPronation;
@@ -853,22 +829,18 @@ void keyboard(unsigned char key, int x, int y) {
         currentFingerKnuckle = keyframePoses[0][6]; currentFingerMid = keyframePoses[0][7];
         currentThumbBaseZ = keyframePoses[0][8]; currentThumbKnuckle = keyframePoses[0][9]; currentThumbMid = keyframePoses[0][10];
         std::cout << "Animation Reset. Contact keyframe restored." << std::endl;
-        cameraChanged = true; // Fortam redraw la reset
-        break;
-
+        cameraChanged = true; break;
     case 'w': cameraPos += cameraSpeed * cameraFront; cameraChanged = true; break;
     case 's': cameraPos -= cameraSpeed * cameraFront; cameraChanged = true; break;
     case 'a': cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; cameraChanged = true; break;
     case 'd': cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed; cameraChanged = true; break;
     case 'q': cameraPos -= cameraSpeed * cameraUp; cameraChanged = true; break;
     case 'e': cameraPos += cameraSpeed * cameraUp; cameraChanged = true; break;
-
     case 'i': cameraPitch += cameraRotationSpeed; cameraChanged = true; break;
     case 'k': cameraPitch -= cameraRotationSpeed; cameraChanged = true; break;
     case 'l': cameraYaw += cameraRotationSpeed; cameraChanged = true; break;
     case 'h': cameraYaw -= cameraRotationSpeed; cameraChanged = true; break;
-
-
+    case 'p': showBezierPath = !showBezierPath; std::cout << "Show Bezier Path: " << (showBezierPath ? "ON" : "OFF") << std::endl; cameraChanged = true; break;
     case '1': if (hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) { keyframePoses[hitKeyframeIndex][3] += 0.05f; std::cout << "Contact WristPronation: " << keyframePoses[hitKeyframeIndex][3] << std::endl; } break;
     case '2': if (hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) { keyframePoses[hitKeyframeIndex][3] -= 0.05f; std::cout << "Contact WristPronation: " << keyframePoses[hitKeyframeIndex][3] << std::endl; } break;
     case '3': if (hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) { keyframePoses[hitKeyframeIndex][5] += 0.05f; std::cout << "Contact WristY: " << keyframePoses[hitKeyframeIndex][5] << std::endl; } break;
@@ -876,15 +848,8 @@ void keyboard(unsigned char key, int x, int y) {
     case 27: glutLeaveMainLoop(); break;
     default: break;
     }
-
-    if (cameraPitch > 89.0f) cameraPitch = 89.0f;
-    if (cameraPitch < -89.0f) cameraPitch = -89.0f;
-
-    // Daca s-a modificat camera sau o tasta care nu e legata de camera dar necesita redraw (cum ar fi SPACE)
-    if (cameraChanged) {
-        // updateCameraFront(); // Este deja apelat la inceputul lui display()
-        glutPostRedisplay();
-    }
+    if (cameraPitch > 89.0f) cameraPitch = 89.0f; if (cameraPitch < -89.0f) cameraPitch = -89.0f;
+    if (cameraChanged) { glutPostRedisplay(); }
 }
 void reshape(int w, int h) {
     if (h == 0) h = 1;
@@ -906,18 +871,13 @@ int main(int argc, char** argv) {
     glDeleteProgram(shader_programme);
     glDeleteVertexArrays(1, &vao); glDeleteBuffers(1, &vbo);
     glDeleteVertexArrays(1, &sphereVao); glDeleteBuffers(1, &sphereVbo); glDeleteBuffers(1, &sphereIbo);
-    glDeleteVertexArrays(1, &courtFloorVao); glDeleteBuffers(1, &courtFloorVbo); glDeleteBuffers(1, &courtFloorIbo); // Nume actualizat
+    glDeleteVertexArrays(1, &courtFloorVao); glDeleteBuffers(1, &courtFloorVbo); glDeleteBuffers(1, &courtFloorIbo);
     glDeleteVertexArrays(1, &ceilingVao); glDeleteBuffers(1, &ceilingVbo); glDeleteBuffers(1, &ceilingIbo);
     glDeleteVertexArrays(1, &generalFloorVao); glDeleteBuffers(1, &generalFloorVbo); glDeleteBuffers(1, &generalFloorIbo);
-
-    if (floorWoodTextureID != 0) {
-        glDeleteTextures(1, &floorWoodTextureID);
-    }
-    if (wallTextureID != 0) {
-        glDeleteTextures(1, &wallTextureID);
-    }
-    if (ceilingTextureID != 0) {
-        glDeleteTextures(1, &ceilingTextureID);
-    }
+    glDeleteVertexArrays(1, &bezierCurveVao); glDeleteBuffers(1, &bezierCurveVbo);
+    if (floorWoodTextureID != 0) { glDeleteTextures(1, &floorWoodTextureID); }
+    if (wallTextureID != 0) { glDeleteTextures(1, &wallTextureID); }
+    if (ceilingTextureID != 0) { glDeleteTextures(1, &ceilingTextureID); }
+    if (netTextureID != 0) { glDeleteTextures(1, &netTextureID); }
     return 0;
 }
