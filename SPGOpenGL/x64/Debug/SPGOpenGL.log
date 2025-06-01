@@ -1,7 +1,7 @@
 ﻿  main.cpp
-C:\SPG\Git\SPGOpenGL\main.cpp(339,57): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
-C:\SPG\Git\SPGOpenGL\main.cpp(366,34): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
-C:\SPG\Git\SPGOpenGL\main.cpp(404,19): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-C:\SPG\Git\SPGOpenGL\main.cpp(405,19): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-C:\SPG\Git\SPGOpenGL\main.cpp(692,58): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\SPG\Git\SPGOpenGL\main.cpp(361,57): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\SPG\Git\SPGOpenGL\main.cpp(388,34): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
+C:\SPG\Git\SPGOpenGL\main.cpp(426,19): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+C:\SPG\Git\SPGOpenGL\main.cpp(427,19): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+C:\SPG\Git\SPGOpenGL\main.cpp(718,58): warning C4267: 'argument': conversion from 'size_t' to 'GLsizei', possible loss of data
   SPGOpenGL.vcxproj -> C:\SPG\Git\x64\Debug\SPGOpenGL.exe

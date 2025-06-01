@@ -25,7 +25,7 @@ vec3 CalculatePointLight(vec3 lightP, vec3 lightC, vec3 normalN, vec3 fragP, vec
     vec3 lightDir = normalize(lightP - fragP);
     float diff = max(dot(normalN, lightDir), 0.0);
     vec3 diffuse = diff * lightC;
-    float specularStrength = 0.6;
+    float specularStrength = 0.3;
     vec3 reflectDir = reflect(-lightDir, normalN);
     float spec = pow(max(dot(viewDirV, reflectDir), 0.0), 32); 
     vec3 specular = specularStrength * spec * lightC;
@@ -39,7 +39,7 @@ void main() {
     vec3 totalLighting = vec3(0.0);
     totalLighting += CalculatePointLight(lightPos1, lightColor1, norm, FragPos, viewDir);
     totalLighting += CalculatePointLight(lightPos2, lightColor2, norm, FragPos, viewDir);
-    totalLighting += vec3(0.05, 0.05, 0.05); 
+    totalLighting += vec3(0.01, 0.01, 0.01); 
 
     vec3 surfaceBaseColor;
 
@@ -47,7 +47,7 @@ void main() {
         vec4 texSample = texture(textureSampler, TexCoord);
         
         if (isNetTexture) { 
-            float whitenessThreshold = 0.85; 
+            float whitenessThreshold = 0.74; 
             if (texSample.r > whitenessThreshold && texSample.g > whitenessThreshold && texSample.b > whitenessThreshold) {
                 discard; 
             }
