@@ -5,8 +5,8 @@
 #include <vector>
 #include <cmath>
 #include <stdio.h>
-#include <cstdlib> 
-#include <ctime>   
+#include <cstdlib> // Pentru rand(), srand()
+#include <ctime>   // Pentru time()
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -39,6 +39,9 @@ GLuint floorWoodTextureID;
 GLuint wallTextureID;
 GLuint ceilingTextureID;
 GLuint netTextureID;
+GLuint leafTextureID;
+GLuint skinTextureID; // NOU
+
 
 // VAO/VBO pentru podeaua generala a camerei
 GLuint generalFloorVao, generalFloorVbo, generalFloorIbo;
@@ -173,7 +176,7 @@ glm::vec3 netMeshColor(1.0f, 1.0f, 1.0f);
 
 
 // Culori obiecte
-glm::vec3 handColor(0.96f, 0.76f, 0.62f);
+glm::vec3 handColor(0.96f, 0.76f, 0.62f); // Culoare fallback pentru mana
 glm::vec3 ballColor(1.0f, 1.0f, 0.8f);
 glm::vec3 lineColor(1.0f, 1.0f, 1.0f);
 
@@ -226,6 +229,7 @@ glm::vec3 lightPos2 = glm::vec3(overallRoomW / 4.0f, 11.0f, 0.0f);
 glm::vec3 lightColor2 = glm::vec3(0.45f, 0.45f, 0.4f);
 glm::vec3 globalAmbientColor = glm::vec3(0.1f, 0.1f, 0.12f);
 
+// NOU: Variabile pentru lovitura de plasa
 int serviceCount = 0;
 const int HIT_NET_AFTER_SERVICES = 3;
 bool ballIsFallingAfterNetHit = false;
@@ -243,7 +247,7 @@ void updateCameraFront() {
 }
 
 float randomFloat(float min, float max) {
-    if (min >= max) return min; 
+    if (min >= max) return min;
     return min + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (max - min)));
 }
 
@@ -277,13 +281,10 @@ GLuint loadTexture(const char* path) {
                 glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAnisotropy);
                 glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
             }
-            else {
-            }
         }
 
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
         stbi_image_free(data);
-
     }
     else {
         std::cerr << "Texture failed to load at path: " << path << std::endl;
@@ -291,6 +292,7 @@ GLuint loadTexture(const char* path) {
         stbi_image_free(data);
         textureID = 0;
     }
+    glBindTexture(GL_TEXTURE_2D, 0);
     return textureID;
 }
 
@@ -298,38 +300,87 @@ GLuint loadTexture(const char* path) {
 void generateSphere() {
     sphereVertices_data.clear(); sphereIndices_data.clear();
     for (int i = 0; i <= sphereStacks; ++i) {
-        float stackAngle = PI * (float)i / sphereStacks;
-        float xy_coord = ballRadius * sin(stackAngle); float z_coord = ballRadius * cos(stackAngle);
+        float stackAngle = PI * static_cast<float>(i) / static_cast<float>(sphereStacks);
+        float xy_coord_multiplier = sin(stackAngle);
+        float z_coord = ballRadius * cos(stackAngle);
+
         for (int j = 0; j <= sphereSlices; ++j) {
-            float sectorAngle = 2 * PI * (float)j / sphereSlices;
-            float x_coord = xy_coord * cos(sectorAngle); float y_coord = xy_coord * sin(sectorAngle);
-            sphereVertices_data.push_back(x_coord); sphereVertices_data.push_back(y_coord); sphereVertices_data.push_back(z_coord);
+            float sectorAngle = 2.0f * PI * static_cast<float>(j) / static_cast<float>(sphereSlices);
+            float x_coord = ballRadius * xy_coord_multiplier * cos(sectorAngle);
+            float y_coord = ballRadius * xy_coord_multiplier * sin(sectorAngle);
+
+            sphereVertices_data.push_back(x_coord);
+            sphereVertices_data.push_back(y_coord);
+            sphereVertices_data.push_back(z_coord);
+
             glm::vec3 normal = glm::normalize(glm::vec3(x_coord, y_coord, z_coord));
-            sphereVertices_data.push_back(normal.x); sphereVertices_data.push_back(normal.y); sphereVertices_data.push_back(normal.z);
+            sphereVertices_data.push_back(normal.x);
+            sphereVertices_data.push_back(normal.y);
+            sphereVertices_data.push_back(normal.z);
+
+            float u = static_cast<float>(j) / static_cast<float>(sphereSlices);
+            float v = 1.0f - (static_cast<float>(i) / static_cast<float>(sphereStacks));
+            sphereVertices_data.push_back(u);
+            sphereVertices_data.push_back(v);
         }
     }
     for (int i = 0; i < sphereStacks; ++i) {
         for (int j = 0; j < sphereSlices; ++j) {
-            int first = (i * (sphereSlices + 1)) + j; int second = first + sphereSlices + 1;
-            sphereIndices_data.push_back(first); sphereIndices_data.push_back(second); sphereIndices_data.push_back(first + 1);
-            sphereIndices_data.push_back(second); sphereIndices_data.push_back(second + 1); sphereIndices_data.push_back(first + 1);
+            int first = (i * (sphereSlices + 1)) + j;
+            int second = first + sphereSlices + 1;
+            sphereIndices_data.push_back(first);
+            sphereIndices_data.push_back(second);
+            sphereIndices_data.push_back(first + 1);
+
+            sphereIndices_data.push_back(second);
+            sphereIndices_data.push_back(second + 1);
+            sphereIndices_data.push_back(first + 1);
         }
     }
 }
+
 
 void generateCuboidVertices(float width, float height, float depth, std::vector<float>& vertices, std::vector<unsigned int>& indices) {
     vertices.clear(); indices.clear();
     float halfW = width / 2.0f; float halfH = height / 2.0f; float halfD = depth / 2.0f;
     vertices = {
-        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f, halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f, halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f, -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
-        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 0.0f, halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 0.0f, halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 1.0f, -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 1.0f,
-        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  0.0f, 1.0f, halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f, halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f, -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
-        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  0.0f, 1.0f, halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  1.0f, 1.0f, halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  1.0f, 0.0f, -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  0.0f, 0.0f,
-         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f, halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f, halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f, halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-         -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f, -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 0.0f, -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 1.0f, -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 1.0f
+        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f,
+         halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f,
+         halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f,
+        -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
+
+        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 0.0f,
+         halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 0.0f,
+         halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 1.0f,
+        -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 1.0f,
+
+        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  0.0f, 1.0f,
+         halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f,
+         halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f,
+        -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
+
+        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  0.0f, 0.0f,
+         halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  1.0f, 0.0f,
+         halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  1.0f, 1.0f,
+        -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  0.0f, 1.0f,
+
+         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+         halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+         halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
+         halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+
+        -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
+        -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
+        -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+        -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 1.0f
     };
     indices = {
-        0, 1, 2,   0, 2, 3, 4, 5, 6,   4, 6, 7, 8, 9, 10,  8, 10,11, 12,13,14,  12,14,15, 16,17,18,  16,18,19, 20,21,22,  20,22,23
+        0, 1, 2,   0, 2, 3,
+        4, 5, 6,   4, 6, 7,
+        8, 9, 10,  8, 10,11,
+        12,13,14, 12,14,15,
+        16,17,18, 16,18,19,
+        20,21,22, 20,22,23
     };
 }
 
@@ -340,27 +391,55 @@ glm::vec3 CalculateBezierPoint(float t, const glm::vec3& p0, const glm::vec3& p1
     return point;
 }
 
-
-void drawCube(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
+// MODIFICAT: drawCube acum accepta si useSkinTexture si textureToUseID
+void drawCube(const glm::mat4& modelMatrixIn, const glm::vec3& color, bool useSkinTexture = false, GLuint textureToUseID = 0) {
     glUniform1i(isNetTextureID, GL_FALSE);
-    glUniform1i(useTextureID, 0);
-    glUniform3fv(colorID, 1, glm::value_ptr(color));
+
+    if (useSkinTexture && textureToUseID != 0) {
+        glUniform1i(useTextureID, 1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textureToUseID);
+        glUniform1i(textureSamplerID, 0);
+    }
+    else {
+        glUniform1i(useTextureID, 0);
+        glUniform3fv(colorID, 1, glm::value_ptr(color));
+    }
+
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
+
+    if (useSkinTexture && textureToUseID != 0) {
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 }
 
-void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
+void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color, bool useBallTexture) { // Parametru redenumit pentru claritate
     glUniform1i(isNetTextureID, GL_FALSE);
-    glUniform1i(useTextureID, 0);
-    glUniform3fv(colorID, 1, glm::value_ptr(color));
+
+    if (useBallTexture && leafTextureID != 0) { // Folosim leafTextureID pentru minge
+        glUniform1i(useTextureID, 1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, leafTextureID);
+        glUniform1i(textureSamplerID, 0);
+    }
+    else {
+        glUniform1i(useTextureID, 0);
+        glUniform3fv(colorID, 1, glm::value_ptr(color));
+    }
+
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
     glBindVertexArray(sphereVao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo);
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(sphereIndices_data.size()), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    if (useBallTexture && leafTextureID != 0) {
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 }
 
 void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices,
@@ -449,12 +528,11 @@ void update() {
 
             if (serviceCount >= HIT_NET_AFTER_SERVICES && !ballIsFallingAfterNetHit) {
                 float netPlayerSideZ = netPosition.z - netThickness / 2.0f;
-                float netOpponentSideZ = netPosition.z + netThickness / 2.0f;
-
                 float netTopY = floorTopSurfaceY + netBaseElevation + netActualHeight;
                 float netBottomY = floorTopSurfaceY + netBaseElevation;
 
-                bool potentialHit = (previousBallPosition.z < netPlayerSideZ && ballPosition.z >= netPlayerSideZ - ballRadius * 0.5f);
+                // Mingea vine din Z < netPlayerSideZ si trebuie sa loveasca netPlayerSideZ
+                bool potentialHit = (previousBallPosition.z < netPlayerSideZ && ballPosition.z >= netPlayerSideZ - ballRadius * 0.3f);
 
 
                 if (potentialHit &&
@@ -465,14 +543,15 @@ void update() {
                     ballOnBezierPath = false;
                     ballIsFallingAfterNetHit = true;
 
-                    ballVelocity = glm::vec3(randomFloat(-0.5f, 0.5f),  
-                        randomFloat(0.1f, 0.8f),   
+                    ballVelocity = glm::vec3(randomFloat(-0.4f, 0.4f),
+                        randomFloat(0.1f, 0.5f),
                         -randomFloat(1.0f, 2.2f));
 
                     ballPosition.z = netPlayerSideZ - ballRadius;
 
-                    if (ballPosition.y > netTopY) ballPosition.y = netTopY - ballRadius * 0.05f; 
-                    else if (ballPosition.y < netBottomY) ballPosition.y = netBottomY + ballRadius; 
+
+                    if (ballPosition.y > netTopY) ballPosition.y = netTopY - ballRadius * 0.05f;
+                    else if (ballPosition.y < netBottomY) ballPosition.y = netBottomY + ballRadius;
                 }
             }
 
@@ -493,11 +572,10 @@ void update() {
 
                 if (serviceCount >= HIT_NET_AFTER_SERVICES) {
                     std::cout << "Service #" << serviceCount << ": Aiming for the net!" << std::endl;
-                    float targetX_net = randomFloat(-courtPlayingAreaW / 2.0f * 0.7f, courtPlayingAreaW / 2.0f * 0.7f); 
+                    float targetX_net = randomFloat(-courtPlayingAreaW / 2.0f * 0.7f, courtPlayingAreaW / 2.0f * 0.7f);
                     float netTopSurfaceY = floorTopSurfaceY + netBaseElevation + netActualHeight;
                     float netBottomSurfaceY = floorTopSurfaceY + netBaseElevation;
-                    // Tinteste un punct pe fata plasei dinspre jucator
-                    bezierP3 = glm::vec3(targetX_net, randomFloat(netBottomSurfaceY + ballRadius * 1.5f, netTopSurfaceY - ballRadius * 0.5f), netPosition.z - netThickness / 2.0f - ballRadius * 0.1f);
+                    bezierP3 = glm::vec3(targetX_net, randomFloat(netBottomSurfaceY + ballRadius * 1.5f, netTopSurfaceY - ballRadius * 0.2f), netPosition.z - netThickness / 2.0f - ballRadius * 0.2f);
 
 
                     float arcHeightFactorNet = randomFloat(0.3f, 0.7f);
@@ -590,7 +668,7 @@ void display() {
     float linesYCenterPosition = floorTopSurfaceY + LINE_THICKNESS_VISUAL_DIM / 2.0f;
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3((courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
-    drawCube(modelMatrix, lineColor);
+    drawCube(modelMatrix, lineColor); // Nu folosim textura de piele pentru linii
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-(courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
@@ -696,60 +774,73 @@ void display() {
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-courtPlayingAreaW / 2.0f - netPoleRadius, poleCenterY, netPosition.z));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(netPoleRadius, netPoleHeight, netPoleRadius));
-    drawCube(modelMatrix, netPoleColor);
+    drawCube(modelMatrix, netPoleColor); // Nu folosim textura de piele pentru stalpi
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(courtPlayingAreaW / 2.0f + netPoleRadius, poleCenterY, netPosition.z));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(netPoleRadius, netPoleHeight, netPoleRadius));
     drawCube(modelMatrix, netPoleColor);
 
-    glUniform1i(isNetTextureID, GL_FALSE);
-    glUniform1i(useTextureID, 0);
 
     glUniform1i(isNetTextureID, GL_FALSE);
     if (ballIsServed || ballInToss || ballOnBezierPath || ballIsFallingAfterNetHit || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
         modelMatrix = glm::translate(glm::mat4(1.0f), ballPosition);
-        drawSphere(modelMatrix, ballColor);
+        drawSphere(modelMatrix, ballColor, true);
     }
 
+    // --- Desenare Mana ---
     glUniform1i(isNetTextureID, GL_FALSE);
     glm::mat4 baseTransformMatrix = glm::mat4(1.0f);
     baseTransformMatrix = glm::translate(baseTransformMatrix, glm::vec3(playerBaseX, floorTopSurfaceY + playerBaseY, playerBaseZ));
-    float initialArmYRotation = -PI / 2.0f;
+    const float initialArmYRotation = -PI / 2.0f;
     baseTransformMatrix = glm::rotate(baseTransformMatrix, initialArmYRotation, glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 currentMatrix = baseTransformMatrix;
-    currentMatrix = glm::rotate(currentMatrix, currentShoulderY, glm::vec3(0.0f, 1.0f, 0.0f)); currentMatrix = glm::rotate(currentMatrix, currentShoulderZ, glm::vec3(0.0f, 0.0f, 1.0f));
+
+    currentMatrix = glm::rotate(currentMatrix, currentShoulderY, glm::vec3(0.0f, 1.0f, 0.0f));
+    currentMatrix = glm::rotate(currentMatrix, currentShoulderZ, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 elbowJointMatrix = glm::translate(currentMatrix, glm::vec3(armLength, 0.0f, 0.0f));
     glm::mat4 armDrawMatrix = glm::translate(currentMatrix, glm::vec3(armLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(armDrawMatrix, glm::vec3(armLength, armWidth, armWidth)), handColor);
+    drawCube(glm::scale(armDrawMatrix, glm::vec3(armLength, armWidth, armWidth)), handColor, true, skinTextureID);
 
-    currentMatrix = elbowJointMatrix; currentMatrix = glm::rotate(currentMatrix, currentElbow, glm::vec3(0.0f, 0.0f, 1.0f));
+    currentMatrix = elbowJointMatrix;
+    currentMatrix = glm::rotate(currentMatrix, currentElbow, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 wristJointMatrix = glm::translate(currentMatrix, glm::vec3(forearmLength, 0.0f, 0.0f));
     glm::mat4 forearmDrawMatrix = glm::translate(currentMatrix, glm::vec3(forearmLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(forearmDrawMatrix, glm::vec3(forearmLength, forearmWidth, forearmWidth)), handColor);
+    drawCube(glm::scale(forearmDrawMatrix, glm::vec3(forearmLength, forearmWidth, forearmWidth)), handColor, true, skinTextureID);
 
-    currentMatrix = wristJointMatrix; currentMatrix = glm::rotate(currentMatrix, currentWristPronation, glm::vec3(1.0f, 0.0f, 0.0f)); currentMatrix = glm::rotate(currentMatrix, currentWristZ, glm::vec3(0.0f, 0.0f, 1.0f)); currentMatrix = glm::rotate(currentMatrix, currentWristY, glm::vec3(0.0f, 1.0f, 0.0f));
+    currentMatrix = wristJointMatrix;
+    currentMatrix = glm::rotate(currentMatrix, currentWristPronation, glm::vec3(1.0f, 0.0f, 0.0f));
+    currentMatrix = glm::rotate(currentMatrix, currentWristZ, glm::vec3(0.0f, 0.0f, 1.0f));
+    currentMatrix = glm::rotate(currentMatrix, currentWristY, glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 palmCenterMatrix = glm::translate(currentMatrix, glm::vec3(palmLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(palmCenterMatrix, glm::vec3(palmLength, palmWidth, palmDepth)), handColor);
+    drawCube(glm::scale(palmCenterMatrix, glm::vec3(palmLength, palmWidth, palmDepth)), handColor, true, skinTextureID);
 
-    float fingerSpacing = palmWidth * 0.8f / 3.0f; float fingerStartXOffset = palmLength / 2.0f; float fingerStartYOffsetBase = (palmWidth / 2.0f) - (fingerSpacing * 0.5f) - fingerWidth / 2.0f;
+    float fingerSpacing = palmWidth * 0.8f / 3.0f;
+    float fingerStartXOffset = palmLength * 0.4f; // Ajustat pentru a fi mai la varful palmei
+    float fingerStartYOffsetBase = (palmWidth / 2.0f) - (fingerSpacing * 0.5f) - fingerWidth / 2.0f;
+
     for (int i = 0; i < 4; ++i) {
         glm::mat4 fingerBasePosMatrix = glm::translate(palmCenterMatrix, glm::vec3(fingerStartXOffset, fingerStartYOffsetBase - i * fingerSpacing, 0.0f));
         glm::mat4 knuckleMatrix = glm::rotate(fingerBasePosMatrix, currentFingerKnuckle, glm::vec3(0.0f, 0.0f, 1.0f));
         glm::mat4 knuckleDrawMatrix = glm::translate(knuckleMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f));
-        drawCube(glm::scale(knuckleDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor);
+        drawCube(glm::scale(knuckleDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor, true, skinTextureID);
+
         glm::mat4 midJointMatrix = glm::translate(knuckleMatrix, glm::vec3(fingerLength, 0.0f, 0.0f));
         glm::mat4 midSegmentMatrix = glm::rotate(midJointMatrix, currentFingerMid, glm::vec3(0.0f, 0.0f, 1.0f));
         glm::mat4 midDrawMatrix = glm::translate(midSegmentMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f));
-        drawCube(glm::scale(midDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor);
+        drawCube(glm::scale(midDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor, true, skinTextureID);
     }
-    glm::mat4 thumbMatrix = glm::translate(palmCenterMatrix, glm::vec3(palmLength * 0.15f, palmWidth / 2.0f + thumbWidth * 0.5f, 0.0f));
-    thumbMatrix = glm::rotate(thumbMatrix, currentThumbBaseZ, glm::vec3(0.0f, 0.0f, 1.0f)); thumbMatrix = glm::rotate(thumbMatrix, currentThumbKnuckle, glm::vec3(0.0f, 0.0f, 1.0f));
-    glm::mat4 thumbBaseDrawMatrix = glm::translate(thumbMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(thumbBaseDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor);
-    glm::mat4 thumbKnuckleJointMatrix = glm::translate(thumbMatrix, glm::vec3(thumbLength, 0.0f, 0.0f));
-    glm::mat4 thumbKnuckleSegmentMatrix = glm::rotate(thumbKnuckleJointMatrix, currentThumbMid, glm::vec3(0.0f, 0.0f, 1.0f));
-    glm::mat4 thumbKnuckleDrawMatrix = glm::translate(thumbKnuckleSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(thumbKnuckleDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor);
+
+    glm::mat4 thumbMatrix = glm::translate(palmCenterMatrix, glm::vec3(palmLength * 0.1f, palmWidth / 2.0f + thumbWidth * 0.3f, 0.0f));
+    thumbMatrix = glm::rotate(thumbMatrix, currentThumbBaseZ, glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 thumbBaseSegmentMatrix = glm::rotate(thumbMatrix, currentThumbKnuckle, glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 thumbBaseDrawMatrix = glm::translate(thumbBaseSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
+    drawCube(glm::scale(thumbBaseDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor, true, skinTextureID);
+
+    glm::mat4 thumbKnuckleJointMatrix = glm::translate(thumbBaseSegmentMatrix, glm::vec3(thumbLength, 0.0f, 0.0f));
+    glm::mat4 thumbMidSegmentMatrix = glm::rotate(thumbKnuckleJointMatrix, currentThumbMid, glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 thumbMidDrawMatrix = glm::translate(thumbMidSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
+    drawCube(glm::scale(thumbMidDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor, true, skinTextureID);
+
 
     glUniform1i(isNetTextureID, GL_FALSE);
     if (showBezierPath && ballOnBezierPath) {
@@ -775,11 +866,11 @@ void display() {
 void init() {
     srand(static_cast<unsigned int>(time(0)));
 
-    const GLubyte* renderer = glGetString(GL_RENDERER); const GLubyte* version = glGetString(GL_VERSION); printf("Renderer: %s\n", renderer); printf("OpenGL version supported %s\n", version);
+    // const GLubyte* renderer = glGetString(GL_RENDERER); const GLubyte* version = glGetString(GL_VERSION); printf("Renderer: %s\n", renderer); printf("OpenGL version supported %s\n", version);
     glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS);
     glEnable(GL_MULTISAMPLE);
 
-    glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); } printf("Using GLEW %s\n", glewGetString(GLEW_VERSION));
+    glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); } //printf("Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -797,8 +888,9 @@ void init() {
     glGenVertexArrays(1, &sphereVao); glBindVertexArray(sphereVao);
     glGenBuffers(1, &sphereVbo); glBindBuffer(GL_ARRAY_BUFFER, sphereVbo); glBufferData(GL_ARRAY_BUFFER, sphereVertices_data.size() * sizeof(float), sphereVertices_data.data(), GL_STATIC_DRAW);
     glGenBuffers(1, &sphereIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices_data.size() * sizeof(unsigned int), sphereIndices_data.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
     generateCuboidVertices(courtPlayingAreaW, courtPlayingAreaThickness, courtPlayingAreaL, courtFloorVertices_data, courtFloorIndices_data);
@@ -835,6 +927,9 @@ void init() {
     wallTextureID = loadTexture("new_wall_texture.jpg"); if (wallTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'new_wall_texture.jpg' pentru pereti.\n"); }
     ceilingTextureID = loadTexture("ceiling_texture.jpg"); if (ceilingTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'ceiling_texture.jpg' pentru tavan.\n"); }
     netTextureID = loadTexture("net_texture.jpg"); if (netTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'net_texture.jpg' pentru fileu.\n"); }
+    leafTextureID = loadTexture("leaf_texture.jpg"); if (leafTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'leaf_texture.jpg' pentru minge.\n"); }
+    skinTextureID = loadTexture("skin_texture.jpg"); if (skinTextureID == 0) { fprintf(stderr, "Nu s-a putut incarca textura 'skin_texture.jpg' pentru mana.\n"); }
+
 
     std::string vstext = textFileRead("vertex.vert"); std::string fstext = textFileRead("fragment.frag"); if (vstext.empty() || fstext.empty()) { fprintf(stderr, "Eroare la citirea shaderelor.\n"); exit(1); }
     const char* vertex_shader_text = vstext.c_str(); const char* fragment_shader_text = fstext.c_str();
@@ -962,5 +1057,7 @@ int main(int argc, char** argv) {
     if (wallTextureID != 0) { glDeleteTextures(1, &wallTextureID); }
     if (ceilingTextureID != 0) { glDeleteTextures(1, &ceilingTextureID); }
     if (netTextureID != 0) { glDeleteTextures(1, &netTextureID); }
+    if (leafTextureID != 0) { glDeleteTextures(1, &leafTextureID); }
+    if (skinTextureID != 0) { glDeleteTextures(1, &skinTextureID); }
     return 0;
 }
