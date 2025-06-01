@@ -5,8 +5,8 @@
 #include <vector>
 #include <cmath>
 #include <stdio.h>
-#include <cstdlib> // Pentru rand(), srand()
-#include <ctime>   // Pentru time()
+#include <cstdlib> 
+#include <ctime>  
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -24,10 +24,17 @@
 
 #define PI glm::pi<float>()
 
-// Shader, VAO/VBO pentru cub (TOATE cuburile vor folosi acest VAO/VBO)
-GLuint shader_programme, vao, vbo;
+// Shader, VAO/VBO
+GLuint shader_programme;
+// VAO/VBO pentru cubul standard (folosit pentru ce nu e mana)
+GLuint vao_standard_cube, vbo_standard_cube;
+//VAO/VBO pentru cubul tesit (folosit pentru mana)
+GLuint vao_beveled_cube, vbo_beveled_cube, ibo_beveled_cube;
+std::vector<float> beveledCubeVertices_data;
+std::vector<unsigned int> beveledCubeIndices_data;
+
+
 glm::mat4 projectionMatrix, viewMatrix;
-// Uniform ID-uri
 GLuint modelMatrixID_uniform;
 GLuint viewMatrixID_uniform;
 GLuint projectionMatrixID_uniform;
@@ -40,13 +47,13 @@ GLuint wallTextureID;
 GLuint ceilingTextureID;
 GLuint netTextureID;
 GLuint leafTextureID;
-GLuint skinTextureID; // NOU
+GLuint skinTextureID;
 
 
 // VAO/VBO pentru podeaua generala a camerei
 GLuint generalFloorVao, generalFloorVbo, generalFloorIbo;
-std::vector<float> generalFloorVertices_data;
-std::vector<unsigned int> generalFloorIndices_data;
+std::vector<float> generalFloorVertices_data_g;
+std::vector<unsigned int> generalFloorIndices_data_g;
 
 
 // Animatie mana
@@ -96,8 +103,8 @@ float fingerWidth = 0.18f * 0.75f; float thumbLength = 0.7f * 0.75f;
 float thumbWidth = 0.20f * 0.75f;
 
 
-// Varfuri pentru un cub unitar (Pozitie + Normala + Coordonate Textura)
-float cubeVertices[] = {
+// Varfuri pentru un cub unitar standard (Pozitie + Normala + Coordonate Textura)
+float standardCubeVertices[] = {
     // Poziții          // Normale           // Coordonate Textură
     // Spate
     -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 0.0f,
@@ -150,6 +157,7 @@ glm::vec3 ballVelocity(0.0f);
 float ballRadius = 0.4f;
 bool ballIsServed = false; bool ballIsHit = false; bool ballInToss = false;
 const float GRAVITY = 9.81f;
+bool ballStoppedByWall = false;
 
 // Variabile pentru Curba Bezier a Mingii
 bool ballOnBezierPath = false;
@@ -176,7 +184,7 @@ glm::vec3 netMeshColor(1.0f, 1.0f, 1.0f);
 
 
 // Culori obiecte
-glm::vec3 handColor(0.96f, 0.76f, 0.62f); // Culoare fallback pentru mana
+glm::vec3 handColor(0.96f, 0.76f, 0.62f);
 glm::vec3 ballColor(1.0f, 1.0f, 0.8f);
 glm::vec3 lineColor(1.0f, 1.0f, 1.0f);
 
@@ -185,15 +193,16 @@ GLuint sphereVao, sphereVbo, sphereIbo;
 std::vector<float> sphereVertices_data; std::vector<unsigned int> sphereIndices_data;
 int sphereStacks = 30; int sphereSlices = 30;
 
-// Teren de joc (cel portocaliu)
+// Teren de joc 
 GLuint courtFloorVao, courtFloorVbo, courtFloorIbo;
-std::vector<float> courtFloorVertices_data;
-std::vector<unsigned int> courtFloorIndices_data;
+std::vector<float> courtFloorVertices_data_c;
+std::vector<unsigned int> courtFloorIndices_data_c;
 
 
 // Tavan
 GLuint ceilingVao, ceilingVbo, ceilingIbo;
-std::vector<float> ceilingVertices_data; std::vector<unsigned int> ceilingIndices_data;
+std::vector<float> ceilingVertices_data_t;
+std::vector<unsigned int> ceilingIndices_data_t;
 float overallRoomW = 25.0f;
 float overallRoomL = 40.0f;
 float ceilingH_thickness = 1.0f;
@@ -229,7 +238,7 @@ glm::vec3 lightPos2 = glm::vec3(overallRoomW / 4.0f, 11.0f, 0.0f);
 glm::vec3 lightColor2 = glm::vec3(0.45f, 0.45f, 0.4f);
 glm::vec3 globalAmbientColor = glm::vec3(0.1f, 0.1f, 0.12f);
 
-// NOU: Variabile pentru lovitura de plasa
+// Variabile pentru lovitura de plasa
 int serviceCount = 0;
 const int HIT_NET_AFTER_SERVICES = 3;
 bool ballIsFallingAfterNetHit = false;
@@ -249,6 +258,18 @@ void updateCameraFront() {
 float randomFloat(float min, float max) {
     if (min >= max) return min;
     return min + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (max - min)));
+}
+
+void generateBeveledCuboidVertices(float width, float height, float depth, float bevelSize,
+    std::vector<float>& outVertices, std::vector<unsigned int>& outIndices) {
+    outVertices.clear();
+    outIndices.clear();
+
+    for (size_t i = 0; i < sizeof(standardCubeVertices) / sizeof(float); ++i) {
+        outVertices.push_back(standardCubeVertices[i]);
+    }
+    if (bevelSize > 0.0f) {
+    }
 }
 
 
@@ -339,48 +360,20 @@ void generateSphere() {
     }
 }
 
-
-void generateCuboidVertices(float width, float height, float depth, std::vector<float>& vertices, std::vector<unsigned int>& indices) {
+void generateStandardCuboidVertices(float width, float height, float depth, std::vector<float>& vertices, std::vector<unsigned int>& indices) {
     vertices.clear(); indices.clear();
     float halfW = width / 2.0f; float halfH = height / 2.0f; float halfD = depth / 2.0f;
     vertices = {
-        -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f,
-         halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f,
-         halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f,
-        -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
-
-        -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 0.0f,
-         halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 0.0f,
-         halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 1.0f,
-        -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 1.0f,
-
-        -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  0.0f, 1.0f,
-         halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f,
-         halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f,
-        -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
-
-        -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  0.0f, 0.0f,
-         halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  1.0f, 0.0f,
-         halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  1.0f, 1.0f,
-        -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  0.0f, 1.0f,
-
-         halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-         halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-         halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f,
-         halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-
-        -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-        -halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-        -halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
-        -halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 1.0f
+       -halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f, halfW, -halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f, halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f, -halfW,  halfH,  halfD,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
+       -halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 0.0f, halfW, -halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 0.0f, halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  0.0f, 1.0f, -halfW,  halfH, -halfD,  0.0f, 0.0f,-1.0f,  1.0f, 1.0f,
+       -halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  0.0f, 1.0f, halfW,  halfH,  halfD,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f, halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f, -halfW,  halfH, -halfD,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
+       -halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  0.0f, 0.0f, halfW, -halfH,  halfD,  0.0f,-1.0f, 0.0f,  1.0f, 0.0f, halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  1.0f, 1.0f, -halfW, -halfH, -halfD,  0.0f,-1.0f, 0.0f,  0.0f, 1.0f,
+        halfW, -halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f, halfW, -halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f, halfW,  halfH, -halfD,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f, halfW,  halfH,  halfD,  1.0f, 0.0f, 0.0f,  1.0f, 1.0f,
+       -halfW, -halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 0.0f,-halfW, -halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 0.0f,-halfW,  halfH, -halfD, -1.0f, 0.0f, 0.0f,  1.0f, 1.0f,-halfW,  halfH,  halfD, -1.0f, 0.0f, 0.0f,  0.0f, 1.0f
     };
     indices = {
-        0, 1, 2,   0, 2, 3,
-        4, 5, 6,   4, 6, 7,
-        8, 9, 10,  8, 10,11,
-        12,13,14, 12,14,15,
-        16,17,18, 16,18,19,
-        20,21,22, 20,22,23
+        0, 1, 2,   0, 2, 3,     4, 5, 6,   4, 6, 7,     8, 9, 10,  8, 10,11,
+        12,13,14, 12,14,15,   16,17,18, 16,18,19,   20,21,22, 20,22,23
     };
 }
 
@@ -391,35 +384,46 @@ glm::vec3 CalculateBezierPoint(float t, const glm::vec3& p0, const glm::vec3& p1
     return point;
 }
 
-// MODIFICAT: drawCube acum accepta si useSkinTexture si textureToUseID
-void drawCube(const glm::mat4& modelMatrixIn, const glm::vec3& color, bool useSkinTexture = false, GLuint textureToUseID = 0) {
+
+void drawStandardCube(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
+    glUniform1i(isNetTextureID, GL_FALSE);
+    glUniform1i(useTextureID, 0);
+    glUniform3fv(colorID, 1, glm::value_ptr(color));
+    glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
+    glBindVertexArray(vao_standard_cube);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+}
+
+void drawBeveledCube(const glm::mat4& modelMatrixIn, const glm::vec3& fallbackColor, bool applyTexture, GLuint textureIDToUse) {
     glUniform1i(isNetTextureID, GL_FALSE);
 
-    if (useSkinTexture && textureToUseID != 0) {
+    if (applyTexture && textureIDToUse != 0) {
         glUniform1i(useTextureID, 1);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textureToUseID);
+        glBindTexture(GL_TEXTURE_2D, textureIDToUse);
         glUniform1i(textureSamplerID, 0);
     }
     else {
         glUniform1i(useTextureID, 0);
-        glUniform3fv(colorID, 1, glm::value_ptr(color));
+        glUniform3fv(colorID, 1, glm::value_ptr(fallbackColor));
     }
 
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
-    glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(vao_beveled_cube);
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(beveledCubeVertices_data.size() / 8));
     glBindVertexArray(0);
 
-    if (useSkinTexture && textureToUseID != 0) {
+    if (applyTexture && textureIDToUse != 0) {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 }
 
-void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color, bool useBallTexture) { // Parametru redenumit pentru claritate
+
+void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color, bool useBallTexture) {
     glUniform1i(isNetTextureID, GL_FALSE);
 
-    if (useBallTexture && leafTextureID != 0) { // Folosim leafTextureID pentru minge
+    if (useBallTexture && leafTextureID != 0) {
         glUniform1i(useTextureID, 1);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, leafTextureID);
@@ -521,6 +525,7 @@ void update() {
     currentThumbMid = lerp(keyframePoses[pose1_idx][10], keyframePoses[pose2_idx][10], t_lerp_val);
 
     if (ballIsServed) {
+
         if (ballOnBezierPath) {
             bezierTime += deltaTime / bezierDuration;
             glm::vec3 previousBallPosition = ballPosition;
@@ -531,9 +536,7 @@ void update() {
                 float netTopY = floorTopSurfaceY + netBaseElevation + netActualHeight;
                 float netBottomY = floorTopSurfaceY + netBaseElevation;
 
-                // Mingea vine din Z < netPlayerSideZ si trebuie sa loveasca netPlayerSideZ
-                bool potentialHit = (previousBallPosition.z < netPlayerSideZ && ballPosition.z >= netPlayerSideZ - ballRadius * 0.3f);
-
+                bool potentialHit = (previousBallPosition.z < netPlayerSideZ && ballPosition.z >= netPlayerSideZ - ballRadius * 0.3f && ballPosition.z < netPlayerSideZ + netThickness + ballRadius * 0.3f);
 
                 if (potentialHit &&
                     ballPosition.x >= -courtPlayingAreaW / 2.0f - ballRadius && ballPosition.x <= courtPlayingAreaW / 2.0f + ballRadius &&
@@ -549,7 +552,6 @@ void update() {
 
                     ballPosition.z = netPlayerSideZ - ballRadius;
 
-
                     if (ballPosition.y > netTopY) ballPosition.y = netTopY - ballRadius * 0.05f;
                     else if (ballPosition.y < netBottomY) ballPosition.y = netBottomY + ballRadius;
                 }
@@ -557,6 +559,7 @@ void update() {
 
             if (bezierTime >= 1.0f && !ballIsFallingAfterNetHit) {
                 ballOnBezierPath = false; ballIsServed = false; ballPosition.y = floorTopSurfaceY + ballRadius;
+                if (serviceCount >= HIT_NET_AFTER_SERVICES && !ballIsFallingAfterNetHit) serviceCount = 0; 
             }
             else if (ballPosition.y <= (floorTopSurfaceY + ballRadius - 0.01f) && bezierTime < 1.0f && !ballIsFallingAfterNetHit) {
                 ballPosition.y = floorTopSurfaceY + ballRadius;
@@ -576,7 +579,6 @@ void update() {
                     float netTopSurfaceY = floorTopSurfaceY + netBaseElevation + netActualHeight;
                     float netBottomSurfaceY = floorTopSurfaceY + netBaseElevation;
                     bezierP3 = glm::vec3(targetX_net, randomFloat(netBottomSurfaceY + ballRadius * 1.5f, netTopSurfaceY - ballRadius * 0.2f), netPosition.z - netThickness / 2.0f - ballRadius * 0.2f);
-
 
                     float arcHeightFactorNet = randomFloat(0.3f, 0.7f);
                     bezierP1 = bezierP0 + glm::vec3((bezierP3.x - bezierP0.x) * 0.3f, 0.0f, (bezierP3.z - bezierP0.z) * 0.4f);
@@ -616,18 +618,69 @@ void update() {
         else if (ballIsFallingAfterNetHit) {
             ballVelocity.y -= GRAVITY * deltaTime * 1.5f;
             ballPosition += ballVelocity * deltaTime;
+        }
 
-            if (ballPosition.y < (floorTopSurfaceY + ballRadius)) {
-                ballPosition.y = floorTopSurfaceY + ballRadius;
+        if (!ballStoppedByWall && (ballInToss || ballOnBezierPath || ballIsFallingAfterNetHit)) {
+            bool collisionOccurredThisFrame = false;
+
+            if (ballPosition.x - ballRadius < -overallRoomW / 2.0f) {
+                ballPosition.x = -overallRoomW / 2.0f + ballRadius;
+                ballVelocity.x = 0;
+                collisionOccurredThisFrame = true;
+                std::cout << "Ball hit wall X-" << std::endl;
+            }
+            else if (ballPosition.x + ballRadius > overallRoomW / 2.0f) {
+                ballPosition.x = overallRoomW / 2.0f - ballRadius;
+                ballVelocity.x = 0;
+                collisionOccurredThisFrame = true;
+                std::cout << "Ball hit wall X+" << std::endl;
+            }
+
+            if (ballPosition.z - ballRadius < -overallRoomL / 2.0f) {
+                ballPosition.z = -overallRoomL / 2.0f + ballRadius;
+                ballVelocity.z = 0;
+                collisionOccurredThisFrame = true;
+                std::cout << "Ball hit wall Z- (behind player)" << std::endl;
+            }
+            else if (ballPosition.z + ballRadius > overallRoomL / 2.0f) {
+                ballPosition.z = overallRoomL / 2.0f - ballRadius;
+                ballVelocity.z = 0;
+                collisionOccurredThisFrame = true;
+                std::cout << "Ball hit wall Z+ (far wall)" << std::endl;
+            }
+
+            if (collisionOccurredThisFrame) {
+                ballStoppedByWall = true;
+                if (!ballIsFallingAfterNetHit) {
+                    ballInToss = false;
+                    ballOnBezierPath = false;
+                    if (ballPosition.y > floorTopSurfaceY + ballRadius + 0.01f) {
+                        ballIsFallingAfterNetHit = true;
+                    }
+                    else {
+                        ballIsServed = false;
+                        ballVelocity = glm::vec3(0.0f);
+                    }
+                }
+            }
+        }
+
+        if (ballPosition.y < (floorTopSurfaceY + ballRadius)) {
+            ballPosition.y = floorTopSurfaceY + ballRadius;
+            if (ballIsFallingAfterNetHit || ballStoppedByWall || ballInToss || ballOnBezierPath) {
                 ballVelocity = glm::vec3(0.0f);
                 ballIsFallingAfterNetHit = false;
+                ballStoppedByWall = false;
                 ballIsServed = false;
-                std::cout << "Ball landed after hitting the net." << std::endl;
+                ballInToss = false;
+                ballOnBezierPath = false;
+                std::cout << "Ball landed on floor." << std::endl;
                 serviceCount = 0;
             }
         }
         needsRedraw = true;
     }
+
 
     if (needsRedraw) { glutPostRedisplay(); }
 }
@@ -658,46 +711,46 @@ void display() {
 
     // --- Podeaua Generală ---
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, generalFloorYPos - (0.05f / 2.0f), 0.0f));
-    drawGeneratedCuboid(generalFloorVao, generalFloorIbo, generalFloorIndices_data.size(), modelMatrix, generalFloorFallbackColor, true, floorWoodTextureID);
+    drawGeneratedCuboid(generalFloorVao, generalFloorIbo, generalFloorIndices_data_g.size(), modelMatrix, generalFloorFallbackColor, true, floorWoodTextureID);
 
     // --- Terenul de Joc ---
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, floorTopSurfaceY - courtPlayingAreaThickness / 2.0f, 0.0f));
-    drawGeneratedCuboid(courtFloorVao, courtFloorIbo, courtFloorIndices_data.size(), modelMatrix, courtOrangeColor, false, 0);
+    drawGeneratedCuboid(courtFloorVao, courtFloorIbo, courtFloorIndices_data_c.size(), modelMatrix, courtOrangeColor, false, 0);
 
     // --- Liniile Terenului ---
     float linesYCenterPosition = floorTopSurfaceY + LINE_THICKNESS_VISUAL_DIM / 2.0f;
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3((courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
-    drawCube(modelMatrix, lineColor); // Nu folosim textura de piele pentru linii
+    drawStandardCube(modelMatrix, lineColor);
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-(courtPlayingAreaW - LINE_WIDTH_DIM) / 2.0f, linesYCenterPosition, 0.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(LINE_WIDTH_DIM, LINE_THICKNESS_VISUAL_DIM, courtPlayingAreaL));
-    drawCube(modelMatrix, lineColor);
+    drawStandardCube(modelMatrix, lineColor);
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, (courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
-    drawCube(modelMatrix, lineColor);
+    drawStandardCube(modelMatrix, lineColor);
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, -(courtPlayingAreaL - LINE_WIDTH_DIM) / 2.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
-    drawCube(modelMatrix, lineColor);
+    drawStandardCube(modelMatrix, lineColor);
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, 0.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
-    drawCube(modelMatrix, lineColor);
+    drawStandardCube(modelMatrix, lineColor);
 
     float attackLineOffsetFromCenter = 3.0f;
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, attackLineOffsetFromCenter));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
-    drawCube(modelMatrix, lineColor);
+    drawStandardCube(modelMatrix, lineColor);
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, -attackLineOffsetFromCenter));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
-    drawCube(modelMatrix, lineColor);
+    drawStandardCube(modelMatrix, lineColor);
 
     // --- Tavanul ---
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, ceilingBottomSurfaceY + ceilingH_thickness / 2.0f, 0.0f));
-    drawGeneratedCuboid(ceilingVao, ceilingIbo, ceilingIndices_data.size(), modelMatrix, ceilingFallbackColor, true, ceilingTextureID);
+    drawGeneratedCuboid(ceilingVao, ceilingIbo, ceilingIndices_data_t.size(), modelMatrix, ceilingFallbackColor, true, ceilingTextureID);
 
     // --- Pereții ---
     glUniform1i(isNetTextureID, GL_FALSE);
@@ -717,7 +770,7 @@ void display() {
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, wallCenterY, -overallRoomL / 2.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(overallRoomW, roomVisualHeight, wallVisualThickness));
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrix));
-    glBindVertexArray(vao); glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(vao_standard_cube); glDrawArrays(GL_TRIANGLES, 0, 36);
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-overallRoomW / 2.0f, wallCenterY, 0.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(wallVisualThickness, roomVisualHeight, overallRoomL));
@@ -759,7 +812,7 @@ void display() {
         glUniform3fv(colorID, 1, glm::value_ptr(netMeshColor));
     }
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrix));
-    glBindVertexArray(vao);
+    glBindVertexArray(vao_standard_cube);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     if (netTextureID != 0) {
         glDisable(GL_BLEND);
@@ -774,15 +827,15 @@ void display() {
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-courtPlayingAreaW / 2.0f - netPoleRadius, poleCenterY, netPosition.z));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(netPoleRadius, netPoleHeight, netPoleRadius));
-    drawCube(modelMatrix, netPoleColor); // Nu folosim textura de piele pentru stalpi
+    drawStandardCube(modelMatrix, netPoleColor);
 
     modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(courtPlayingAreaW / 2.0f + netPoleRadius, poleCenterY, netPosition.z));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(netPoleRadius, netPoleHeight, netPoleRadius));
-    drawCube(modelMatrix, netPoleColor);
+    drawStandardCube(modelMatrix, netPoleColor);
 
 
     glUniform1i(isNetTextureID, GL_FALSE);
-    if (ballIsServed || ballInToss || ballOnBezierPath || ballIsFallingAfterNetHit || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
+    if (ballIsServed || ballInToss || ballOnBezierPath || ballIsFallingAfterNetHit || ballStoppedByWall || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
         modelMatrix = glm::translate(glm::mat4(1.0f), ballPosition);
         drawSphere(modelMatrix, ballColor, true);
     }
@@ -799,57 +852,57 @@ void display() {
     currentMatrix = glm::rotate(currentMatrix, currentShoulderZ, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 elbowJointMatrix = glm::translate(currentMatrix, glm::vec3(armLength, 0.0f, 0.0f));
     glm::mat4 armDrawMatrix = glm::translate(currentMatrix, glm::vec3(armLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(armDrawMatrix, glm::vec3(armLength, armWidth, armWidth)), handColor, true, skinTextureID);
+    drawBeveledCube(glm::scale(armDrawMatrix, glm::vec3(armLength, armWidth, armWidth)), handColor, true, skinTextureID);
 
     currentMatrix = elbowJointMatrix;
     currentMatrix = glm::rotate(currentMatrix, currentElbow, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 wristJointMatrix = glm::translate(currentMatrix, glm::vec3(forearmLength, 0.0f, 0.0f));
     glm::mat4 forearmDrawMatrix = glm::translate(currentMatrix, glm::vec3(forearmLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(forearmDrawMatrix, glm::vec3(forearmLength, forearmWidth, forearmWidth)), handColor, true, skinTextureID);
+    drawBeveledCube(glm::scale(forearmDrawMatrix, glm::vec3(forearmLength, forearmWidth, forearmWidth)), handColor, true, skinTextureID);
 
     currentMatrix = wristJointMatrix;
     currentMatrix = glm::rotate(currentMatrix, currentWristPronation, glm::vec3(1.0f, 0.0f, 0.0f));
     currentMatrix = glm::rotate(currentMatrix, currentWristZ, glm::vec3(0.0f, 0.0f, 1.0f));
     currentMatrix = glm::rotate(currentMatrix, currentWristY, glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 palmCenterMatrix = glm::translate(currentMatrix, glm::vec3(palmLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(palmCenterMatrix, glm::vec3(palmLength, palmWidth, palmDepth)), handColor, true, skinTextureID);
+    drawBeveledCube(glm::scale(palmCenterMatrix, glm::vec3(palmLength, palmWidth, palmDepth)), handColor, true, skinTextureID);
 
     float fingerSpacing = palmWidth * 0.8f / 3.0f;
-    float fingerStartXOffset = palmLength * 0.4f; // Ajustat pentru a fi mai la varful palmei
+    float fingerStartXOffset = palmLength * 0.4f;
     float fingerStartYOffsetBase = (palmWidth / 2.0f) - (fingerSpacing * 0.5f) - fingerWidth / 2.0f;
 
     for (int i = 0; i < 4; ++i) {
         glm::mat4 fingerBasePosMatrix = glm::translate(palmCenterMatrix, glm::vec3(fingerStartXOffset, fingerStartYOffsetBase - i * fingerSpacing, 0.0f));
         glm::mat4 knuckleMatrix = glm::rotate(fingerBasePosMatrix, currentFingerKnuckle, glm::vec3(0.0f, 0.0f, 1.0f));
         glm::mat4 knuckleDrawMatrix = glm::translate(knuckleMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f));
-        drawCube(glm::scale(knuckleDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor, true, skinTextureID);
+        drawBeveledCube(glm::scale(knuckleDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor, true, skinTextureID);
 
         glm::mat4 midJointMatrix = glm::translate(knuckleMatrix, glm::vec3(fingerLength, 0.0f, 0.0f));
         glm::mat4 midSegmentMatrix = glm::rotate(midJointMatrix, currentFingerMid, glm::vec3(0.0f, 0.0f, 1.0f));
         glm::mat4 midDrawMatrix = glm::translate(midSegmentMatrix, glm::vec3(fingerLength / 2.0f, 0.0f, 0.0f));
-        drawCube(glm::scale(midDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor, true, skinTextureID);
+        drawBeveledCube(glm::scale(midDrawMatrix, glm::vec3(fingerLength, fingerWidth, fingerWidth)), handColor, true, skinTextureID);
     }
 
     glm::mat4 thumbMatrix = glm::translate(palmCenterMatrix, glm::vec3(palmLength * 0.1f, palmWidth / 2.0f + thumbWidth * 0.3f, 0.0f));
     thumbMatrix = glm::rotate(thumbMatrix, currentThumbBaseZ, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 thumbBaseSegmentMatrix = glm::rotate(thumbMatrix, currentThumbKnuckle, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 thumbBaseDrawMatrix = glm::translate(thumbBaseSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(thumbBaseDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor, true, skinTextureID);
+    drawBeveledCube(glm::scale(thumbBaseDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor, true, skinTextureID);
 
     glm::mat4 thumbKnuckleJointMatrix = glm::translate(thumbBaseSegmentMatrix, glm::vec3(thumbLength, 0.0f, 0.0f));
     glm::mat4 thumbMidSegmentMatrix = glm::rotate(thumbKnuckleJointMatrix, currentThumbMid, glm::vec3(0.0f, 0.0f, 1.0f));
     glm::mat4 thumbMidDrawMatrix = glm::translate(thumbMidSegmentMatrix, glm::vec3(thumbLength / 2.0f, 0.0f, 0.0f));
-    drawCube(glm::scale(thumbMidDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor, true, skinTextureID);
+    drawBeveledCube(glm::scale(thumbMidDrawMatrix, glm::vec3(thumbLength, thumbWidth, thumbWidth)), handColor, true, skinTextureID);
 
 
     glUniform1i(isNetTextureID, GL_FALSE);
     if (showBezierPath && ballOnBezierPath) {
         glUniform1i(useTextureID, 0);
         glm::mat4 pointModelMatrix; float controlPointSize = 0.15f;
-        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP0); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(1.0f, 0.0f, 0.0f));
-        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP1); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(0.0f, 1.0f, 0.0f));
-        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP2); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(0.0f, 0.0f, 1.0f));
-        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP3); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawCube(pointModelMatrix, glm::vec3(1.0f, 1.0f, 0.0f));
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP0); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawStandardCube(pointModelMatrix, glm::vec3(1.0f, 0.0f, 0.0f));
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP1); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawStandardCube(pointModelMatrix, glm::vec3(0.0f, 1.0f, 0.0f));
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP2); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawStandardCube(pointModelMatrix, glm::vec3(0.0f, 0.0f, 1.0f));
+        pointModelMatrix = glm::translate(glm::mat4(1.0f), bezierP3); pointModelMatrix = glm::scale(pointModelMatrix, glm::vec3(controlPointSize)); drawStandardCube(pointModelMatrix, glm::vec3(1.0f, 1.0f, 0.0f));
 
         std::vector<glm::vec3> curveVertices; const int numCurveSegments = 50;
         for (int i = 0; i <= numCurveSegments; ++i) { float t = static_cast<float>(i) / static_cast<float>(numCurveSegments); curveVertices.push_back(CalculateBezierPoint(t, bezierP0, bezierP1, bezierP2, bezierP3)); }
@@ -866,23 +919,36 @@ void display() {
 void init() {
     srand(static_cast<unsigned int>(time(0)));
 
-    // const GLubyte* renderer = glGetString(GL_RENDERER); const GLubyte* version = glGetString(GL_VERSION); printf("Renderer: %s\n", renderer); printf("OpenGL version supported %s\n", version);
     glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS);
     glEnable(GL_MULTISAMPLE);
 
-    glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); } //printf("Using GLEW %s\n", glewGetString(GLEW_VERSION));
+    glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); }
 
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+    glGenBuffers(1, &vbo_standard_cube);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_standard_cube);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(standardCubeVertices), standardCubeVertices, GL_STATIC_DRAW);
 
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glGenVertexArrays(1, &vao_standard_cube);
+    glBindVertexArray(vao_standard_cube);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_standard_cube);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
+
+
+    generateBeveledCuboidVertices(1.0f, 1.0f, 1.0f, 0.0f, beveledCubeVertices_data, beveledCubeIndices_data);
+
+    glGenVertexArrays(1, &vao_beveled_cube);
+    glBindVertexArray(vao_beveled_cube);
+    glGenBuffers(1, &vbo_beveled_cube);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo_beveled_cube);
+    glBufferData(GL_ARRAY_BUFFER, beveledCubeVertices_data.size() * sizeof(float), beveledCubeVertices_data.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
+    glBindVertexArray(0);
+
 
     generateSphere();
     glGenVertexArrays(1, &sphereVao); glBindVertexArray(sphereVao);
@@ -893,29 +959,29 @@ void init() {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
-    generateCuboidVertices(courtPlayingAreaW, courtPlayingAreaThickness, courtPlayingAreaL, courtFloorVertices_data, courtFloorIndices_data);
+    generateStandardCuboidVertices(courtPlayingAreaW, courtPlayingAreaThickness, courtPlayingAreaL, courtFloorVertices_data_c, courtFloorIndices_data_c);
     glGenVertexArrays(1, &courtFloorVao); glBindVertexArray(courtFloorVao);
-    glGenBuffers(1, &courtFloorVbo); glBindBuffer(GL_ARRAY_BUFFER, courtFloorVbo); glBufferData(GL_ARRAY_BUFFER, courtFloorVertices_data.size() * sizeof(float), courtFloorVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &courtFloorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, courtFloorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, courtFloorIndices_data.size() * sizeof(unsigned int), courtFloorIndices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &courtFloorVbo); glBindBuffer(GL_ARRAY_BUFFER, courtFloorVbo); glBufferData(GL_ARRAY_BUFFER, courtFloorVertices_data_c.size() * sizeof(float), courtFloorVertices_data_c.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &courtFloorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, courtFloorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, courtFloorIndices_data_c.size() * sizeof(unsigned int), courtFloorIndices_data_c.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
-    generateCuboidVertices(overallRoomW, ceilingH_thickness, overallRoomL, ceilingVertices_data, ceilingIndices_data);
+    generateStandardCuboidVertices(overallRoomW, ceilingH_thickness, overallRoomL, ceilingVertices_data_t, ceilingIndices_data_t);
     glGenVertexArrays(1, &ceilingVao); glBindVertexArray(ceilingVao);
-    glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo); glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data.size() * sizeof(float), ceilingVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &ceilingIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ceilingIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data.size() * sizeof(unsigned int), ceilingIndices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &ceilingVbo); glBindBuffer(GL_ARRAY_BUFFER, ceilingVbo); glBufferData(GL_ARRAY_BUFFER, ceilingVertices_data_t.size() * sizeof(float), ceilingVertices_data_t.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &ceilingIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ceilingIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, ceilingIndices_data_t.size() * sizeof(unsigned int), ceilingIndices_data_t.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
     float generalFloorThickness = 0.05f;
-    generateCuboidVertices(overallRoomW * 1.5f, generalFloorThickness, overallRoomL * 1.5f, generalFloorVertices_data, generalFloorIndices_data);
+    generateStandardCuboidVertices(overallRoomW * 1.5f, generalFloorThickness, overallRoomL * 1.5f, generalFloorVertices_data_g, generalFloorIndices_data_g);
     glGenVertexArrays(1, &generalFloorVao); glBindVertexArray(generalFloorVao);
-    glGenBuffers(1, &generalFloorVbo); glBindBuffer(GL_ARRAY_BUFFER, generalFloorVbo); glBufferData(GL_ARRAY_BUFFER, generalFloorVertices_data.size() * sizeof(float), generalFloorVertices_data.data(), GL_STATIC_DRAW);
-    glGenBuffers(1, &generalFloorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, generalFloorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, generalFloorIndices_data.size() * sizeof(unsigned int), generalFloorIndices_data.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &generalFloorVbo); glBindBuffer(GL_ARRAY_BUFFER, generalFloorVbo); glBufferData(GL_ARRAY_BUFFER, generalFloorVertices_data_g.size() * sizeof(float), generalFloorVertices_data_g.data(), GL_STATIC_DRAW);
+    glGenBuffers(1, &generalFloorIbo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, generalFloorIbo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, generalFloorIndices_data_g.size() * sizeof(unsigned int), generalFloorIndices_data_g.data(), GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); glEnableVertexAttribArray(2);
@@ -980,11 +1046,12 @@ void keyboard(unsigned char key, int x, int y) {
     bool cameraChanged = false;
     switch (key) {
     case 'j':
-        if (!ballIsServed && !ballIsFallingAfterNetHit) {
+        if (!ballIsServed && !ballIsFallingAfterNetHit && !ballStoppedByWall) {
             serviceCount++;
             isAnimatingForward = true; isAnimatingBackward = false; animationProgress = 0.0f;
             ballIsServed = true; ballInToss = true; ballIsHit = false; ballOnBezierPath = false;
             ballIsFallingAfterNetHit = false;
+            ballStoppedByWall = false;
             ballPosition = glm::vec3(playerBaseX - 0.1f, (floorTopSurfaceY + playerBaseY) + 1.0f, playerBaseZ + 0.5f);
             ballVelocity = glm::vec3(0.05f, 8.8f, 1.1f);
             std::cout << "Serve initiated. Ball toss. Service #" << serviceCount << std::endl;
@@ -995,6 +1062,7 @@ void keyboard(unsigned char key, int x, int y) {
         isAnimatingForward = false; isAnimatingBackward = false; animationProgress = 0.0f;
         ballIsServed = false; ballInToss = false; ballIsHit = false; ballOnBezierPath = false; bezierTime = 0.0f;
         ballIsFallingAfterNetHit = false;
+        ballStoppedByWall = false;
         ballPosition = glm::vec3(playerBaseX, (floorTopSurfaceY + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f);
         ballVelocity = glm::vec3(0.0f);
         if (contactKeyframeOriginalsStored && hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) {
@@ -1047,7 +1115,9 @@ int main(int argc, char** argv) {
     lastUpdateTime = glutGet(GLUT_ELAPSED_TIME);
     glutMainLoop();
     glDeleteProgram(shader_programme);
-    glDeleteVertexArrays(1, &vao); glDeleteBuffers(1, &vbo);
+    glDeleteVertexArrays(1, &vao_standard_cube); glDeleteBuffers(1, &vbo_standard_cube);
+    glDeleteVertexArrays(1, &vao_beveled_cube); glDeleteBuffers(1, &vbo_beveled_cube);
+
     glDeleteVertexArrays(1, &sphereVao); glDeleteBuffers(1, &sphereVbo); glDeleteBuffers(1, &sphereIbo);
     glDeleteVertexArrays(1, &courtFloorVao); glDeleteBuffers(1, &courtFloorVbo); glDeleteBuffers(1, &courtFloorIbo);
     glDeleteVertexArrays(1, &ceilingVao); glDeleteBuffers(1, &ceilingVbo); glDeleteBuffers(1, &ceilingIbo);
