@@ -5,6 +5,8 @@
 #include <vector>
 #include <cmath>
 #include <stdio.h>
+#include <cstdlib> 
+#include <ctime>   
 
 #include <GL/glew.h>
 #include <GL/freeglut.h>
@@ -224,10 +226,9 @@ glm::vec3 lightPos2 = glm::vec3(overallRoomW / 4.0f, 11.0f, 0.0f);
 glm::vec3 lightColor2 = glm::vec3(0.45f, 0.45f, 0.4f);
 glm::vec3 globalAmbientColor = glm::vec3(0.1f, 0.1f, 0.12f);
 
-
-//Serva in plasa
-int serviceCount = 0; 
+int serviceCount = 0;
 const int HIT_NET_AFTER_SERVICES = 3;
+bool ballIsFallingAfterNetHit = false;
 
 
 std::string textFileRead(const char* fn) { std::ifstream ifile(fn); if (!ifile.is_open()) { std::cerr << "Eroare la deschiderea fisierului: " << fn << std::endl; return ""; } std::string filetext; std::string line; while (std::getline(ifile, line)) { filetext.append(line + "\n"); } return filetext; }
@@ -240,6 +241,12 @@ void updateCameraFront() {
     front.z = sin(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
     cameraFront = glm::normalize(front);
 }
+
+float randomFloat(float min, float max) {
+    if (min >= max) return min; 
+    return min + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX / (max - min)));
+}
+
 
 GLuint loadTexture(const char* path) {
     GLuint textureID;
@@ -264,22 +271,19 @@ GLuint loadTexture(const char* path) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        if (path && strcmp(path, "net_texture.jpg") == 0) { 
+        if (path && strcmp(path, "net_texture.jpg") == 0) {
             if (glewIsSupported("GL_EXT_texture_filter_anisotropic")) {
                 GLfloat maxAnisotropy;
                 glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxAnisotropy);
                 glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, maxAnisotropy);
-                std::cout << "Anisotropic filtering enabled for net texture with max factor: " << maxAnisotropy << std::endl;
             }
             else {
-                std::cout << "Anisotropic filtering NOT supported for net texture." << std::endl;
             }
         }
 
-
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
         stbi_image_free(data);
-        std::cout << "Texture loaded successfully: " << path << std::endl;
+
     }
     else {
         std::cerr << "Texture failed to load at path: " << path << std::endl;
@@ -354,7 +358,7 @@ void drawSphere(const glm::mat4& modelMatrixIn, const glm::vec3& color) {
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
     glBindVertexArray(sphereVao);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, sphereIbo);
-    glDrawElements(GL_TRIANGLES, sphereIndices_data.size(), GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(sphereIndices_data.size()), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
@@ -366,7 +370,6 @@ void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices
     if (specificTextureID != netTextureID) {
         glUniform1i(isNetTextureID, GL_FALSE);
     }
-
 
     if (textureThisCuboid && specificTextureID != 0) {
         glUniform1i(useTextureID, 1);
@@ -381,7 +384,7 @@ void drawGeneratedCuboid(GLuint vao_cuboid, GLuint ibo_cuboid, size_t numIndices
     glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(modelMatrixIn));
     glBindVertexArray(vao_cuboid);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_cuboid);
-    glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(numIndices), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     if (textureThisCuboid && specificTextureID != 0) {
@@ -419,8 +422,8 @@ void update() {
         needsRedraw = true;
     }
 
-    int pose1_idx = floor(animationProgress);
-    int pose2_idx = ceil(animationProgress);
+    int pose1_idx = static_cast<int>(floor(animationProgress));
+    int pose2_idx = static_cast<int>(ceil(animationProgress));
     pose1_idx = glm::clamp(pose1_idx, 0, NUM_POSES - 1);
     pose2_idx = glm::clamp(pose2_idx, 0, NUM_POSES - 1);
     float t_lerp_val = (pose1_idx == pose2_idx) ? 0.0f : (animationProgress - (float)pose1_idx);
@@ -441,47 +444,108 @@ void update() {
     if (ballIsServed) {
         if (ballOnBezierPath) {
             bezierTime += deltaTime / bezierDuration;
+            glm::vec3 previousBallPosition = ballPosition;
             ballPosition = CalculateBezierPoint(glm::clamp(bezierTime, 0.0f, 1.0f), bezierP0, bezierP1, bezierP2, bezierP3);
-            if (bezierTime >= 1.0f) {
-                ballOnBezierPath = false; ballIsServed = false; ballPosition.y = floorTopSurfaceY + ballRadius;
-                std::cout << "Ball finished Bezier path (time)." << std::endl;
+
+            if (serviceCount >= HIT_NET_AFTER_SERVICES && !ballIsFallingAfterNetHit) {
+                float netPlayerSideZ = netPosition.z - netThickness / 2.0f;
+                float netOpponentSideZ = netPosition.z + netThickness / 2.0f;
+
+                float netTopY = floorTopSurfaceY + netBaseElevation + netActualHeight;
+                float netBottomY = floorTopSurfaceY + netBaseElevation;
+
+                bool potentialHit = (previousBallPosition.z < netPlayerSideZ && ballPosition.z >= netPlayerSideZ - ballRadius * 0.5f);
+
+
+                if (potentialHit &&
+                    ballPosition.x >= -courtPlayingAreaW / 2.0f - ballRadius && ballPosition.x <= courtPlayingAreaW / 2.0f + ballRadius &&
+                    ballPosition.y >= netBottomY - ballRadius && ballPosition.y <= netTopY + ballRadius) {
+
+                    std::cout << "Ball hit the net on service #" << serviceCount << "!" << std::endl;
+                    ballOnBezierPath = false;
+                    ballIsFallingAfterNetHit = true;
+
+                    ballVelocity = glm::vec3(randomFloat(-0.5f, 0.5f),  
+                        randomFloat(0.1f, 0.8f),   
+                        -randomFloat(1.0f, 2.2f));
+
+                    ballPosition.z = netPlayerSideZ - ballRadius;
+
+                    if (ballPosition.y > netTopY) ballPosition.y = netTopY - ballRadius * 0.05f; 
+                    else if (ballPosition.y < netBottomY) ballPosition.y = netBottomY + ballRadius; 
+                }
             }
-            else if (ballPosition.y <= (floorTopSurfaceY + ballRadius - 0.01f) && bezierTime < 1.0f) {
+
+            if (bezierTime >= 1.0f && !ballIsFallingAfterNetHit) {
+                ballOnBezierPath = false; ballIsServed = false; ballPosition.y = floorTopSurfaceY + ballRadius;
+            }
+            else if (ballPosition.y <= (floorTopSurfaceY + ballRadius - 0.01f) && bezierTime < 1.0f && !ballIsFallingAfterNetHit) {
                 ballPosition.y = floorTopSurfaceY + ballRadius;
             }
         }
         else if (ballInToss) {
             ballVelocity.y -= GRAVITY * deltaTime * 1.25f; ballPosition += ballVelocity * deltaTime;
-            float hitMomentTriggerProgress = (float)hitKeyframeIndex; float animationProgressCurrentFrame = animationProgress;
+            float hitMomentTriggerProgress = static_cast<float>(hitKeyframeIndex);
+            float animationProgressCurrentFrame = animationProgress;
             if (isAnimatingForward && animationProgressCurrentFrame >= hitMomentTriggerProgress && !ballIsHit) {
                 ballIsHit = true; ballInToss = false; ballOnBezierPath = true; bezierTime = 0.0f;
                 bezierP0 = ballPosition; if (bezierP0.y < floorTopSurfaceY + ballRadius) { bezierP0.y = floorTopSurfaceY + ballRadius; }
-                float targetX = glm::linearRand(-courtPlayingAreaW / 2.0f + ballRadius + 0.7f, courtPlayingAreaW / 2.0f - ballRadius - 0.7f);
-                float targetZ = glm::linearRand(netPosition.z + 2.0f, courtPlayingAreaL / 2.0f - ballRadius - 1.0f);
-                bezierP3 = glm::vec3(targetX, floorTopSurfaceY + ballRadius, targetZ);
-                float netTopVisibleY = floorTopSurfaceY + netBaseElevation + netActualHeight;
-                float clearanceOverNet = 0.7f; float controlPointBaseHeight = netTopVisibleY + clearanceOverNet;
-                float distP0P3_XZ = glm::distance(glm::vec2(bezierP0.x, bezierP0.z), glm::vec2(bezierP3.x, bezierP3.z));
-                float arcHeightFactor = distP0P3_XZ * 0.25f;
-                float p1_y_candidate = bezierP0.y + arcHeightFactor;
-                float p2_y_base_offset = (bezierP0.y > netTopVisibleY) ? arcHeightFactor * 0.6f : arcHeightFactor * 0.4f;
-                float p2_y_candidate = bezierP3.y + p2_y_base_offset;
-                bezierP1 = bezierP0 + glm::vec3((bezierP3.x - bezierP0.x) * 0.20f, 0.0f, (bezierP3.z - bezierP0.z) * 0.28f);
-                bezierP1.y = glm::max(controlPointBaseHeight, p1_y_candidate);
-                bezierP2 = bezierP3 + glm::vec3((bezierP0.x - bezierP3.x) * 0.20f, 0.0f, (bezierP0.z - bezierP3.z) * 0.28f);
-                bezierP2.y = glm::max(controlPointBaseHeight * 0.80f, p2_y_candidate);
-                if (abs(bezierP0.z - netPosition.z) < 1.8f && bezierP0.y < netTopVisibleY + 0.8f) {
-                    bezierP1.y = glm::max(bezierP1.y, bezierP0.y + 1.0f); bezierP2.y = glm::max(bezierP2.y, bezierP0.y + 0.8f);
+
+                if (serviceCount >= HIT_NET_AFTER_SERVICES) {
+                    std::cout << "Service #" << serviceCount << ": Aiming for the net!" << std::endl;
+                    float targetX_net = randomFloat(-courtPlayingAreaW / 2.0f * 0.7f, courtPlayingAreaW / 2.0f * 0.7f); 
+                    float netTopSurfaceY = floorTopSurfaceY + netBaseElevation + netActualHeight;
+                    float netBottomSurfaceY = floorTopSurfaceY + netBaseElevation;
+                    // Tinteste un punct pe fata plasei dinspre jucator
+                    bezierP3 = glm::vec3(targetX_net, randomFloat(netBottomSurfaceY + ballRadius * 1.5f, netTopSurfaceY - ballRadius * 0.5f), netPosition.z - netThickness / 2.0f - ballRadius * 0.1f);
+
+
+                    float arcHeightFactorNet = randomFloat(0.3f, 0.7f);
+                    bezierP1 = bezierP0 + glm::vec3((bezierP3.x - bezierP0.x) * 0.3f, 0.0f, (bezierP3.z - bezierP0.z) * 0.4f);
+                    bezierP1.y = glm::max(bezierP0.y + arcHeightFactorNet, bezierP3.y + arcHeightFactorNet + 0.2f);
+                    bezierP2 = bezierP3 + glm::vec3((bezierP0.x - bezierP3.x) * 0.3f, 0.0f, (bezierP0.z - bezierP3.z) * 0.4f);
+                    bezierP2.y = glm::max(bezierP3.y + arcHeightFactorNet * 0.8f, bezierP0.y + arcHeightFactorNet - 0.05f);
+                    if (bezierP1.y < bezierP3.y) bezierP1.y = bezierP3.y + 0.1f;
+                    if (bezierP2.y < bezierP3.y) bezierP2.y = bezierP3.y + 0.05f;
                 }
-                if (bezierP0.y <= floorTopSurfaceY + ballRadius + 0.1f) {
-                    bezierP1.y = glm::max(bezierP1.y, floorTopSurfaceY + ballRadius + 1.8f); bezierP2.y = glm::max(bezierP2.y, floorTopSurfaceY + ballRadius + 1.5f);
+                else {
+                    float targetX = randomFloat(-courtPlayingAreaW / 2.0f + ballRadius + 0.7f, courtPlayingAreaW / 2.0f - ballRadius - 0.7f);
+                    float targetZ = randomFloat(netPosition.z + 2.0f, courtPlayingAreaL / 2.0f - ballRadius - 1.0f);
+                    bezierP3 = glm::vec3(targetX, floorTopSurfaceY + ballRadius, targetZ);
+                    float netTopVisibleY = floorTopSurfaceY + netBaseElevation + netActualHeight;
+                    float clearanceOverNet = 0.7f; float controlPointBaseHeight = netTopVisibleY + clearanceOverNet;
+                    float distP0P3_XZ = glm::distance(glm::vec2(bezierP0.x, bezierP0.z), glm::vec2(bezierP3.x, bezierP3.z));
+                    float arcHeightFactor = distP0P3_XZ * 0.25f;
+                    float p1_y_candidate = bezierP0.y + arcHeightFactor;
+                    float p2_y_base_offset = (bezierP0.y > netTopVisibleY) ? arcHeightFactor * 0.6f : arcHeightFactor * 0.4f;
+                    float p2_y_candidate = bezierP3.y + p2_y_base_offset;
+                    bezierP1 = bezierP0 + glm::vec3((bezierP3.x - bezierP0.x) * 0.20f, 0.0f, (bezierP3.z - bezierP0.z) * 0.28f);
+                    bezierP1.y = glm::max(controlPointBaseHeight, p1_y_candidate);
+                    bezierP2 = bezierP3 + glm::vec3((bezierP0.x - bezierP3.x) * 0.20f, 0.0f, (bezierP0.z - bezierP3.z) * 0.28f);
+                    bezierP2.y = glm::max(controlPointBaseHeight * 0.80f, p2_y_candidate);
+                    if (abs(bezierP0.z - netPosition.z) < 1.8f && bezierP0.y < netTopVisibleY + 0.8f) {
+                        bezierP1.y = glm::max(bezierP1.y, bezierP0.y + 1.0f); bezierP2.y = glm::max(bezierP2.y, bezierP0.y + 0.8f);
+                    }
+                    if (bezierP0.y <= floorTopSurfaceY + ballRadius + 0.1f) {
+                        bezierP1.y = glm::max(bezierP1.y, floorTopSurfaceY + ballRadius + 1.8f); bezierP2.y = glm::max(bezierP2.y, floorTopSurfaceY + ballRadius + 1.5f);
+                    }
                 }
-                std::cout << "TIMED HIT! Switching to Bezier Path." << std::endl;
-                std::cout << " P0: " << bezierP0.x << "," << bezierP0.y << "," << bezierP0.z << " P1: " << bezierP1.x << "," << bezierP1.y << "," << bezierP1.z << " P2: " << bezierP2.x << "," << bezierP2.y << "," << bezierP2.z << " P3: " << bezierP3.x << "," << bezierP3.y << "," << bezierP3.z << std::endl;
             }
             if (ballPosition.y < (floorTopSurfaceY + ballRadius) && !ballIsHit) {
                 ballPosition.y = floorTopSurfaceY + ballRadius; ballVelocity.y = 0;
-                std::cout << "Ball on floor during toss. Waiting for timed hit." << std::endl;
+            }
+        }
+        else if (ballIsFallingAfterNetHit) {
+            ballVelocity.y -= GRAVITY * deltaTime * 1.5f;
+            ballPosition += ballVelocity * deltaTime;
+
+            if (ballPosition.y < (floorTopSurfaceY + ballRadius)) {
+                ballPosition.y = floorTopSurfaceY + ballRadius;
+                ballVelocity = glm::vec3(0.0f);
+                ballIsFallingAfterNetHit = false;
+                ballIsServed = false;
+                std::cout << "Ball landed after hitting the net." << std::endl;
+                serviceCount = 0;
             }
         }
         needsRedraw = true;
@@ -506,8 +570,6 @@ void display() {
     glUniform3fv(ambientColorID, 1, glm::value_ptr(globalAmbientColor));
     glUniformMatrix4fv(viewMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(viewMatrix));
     glUniformMatrix4fv(projectionMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
-
-
 
     float generalFloorYPos = -0.05f;
     float ceilingBottomSurfaceY = 12.0f;
@@ -542,7 +604,7 @@ void display() {
     modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
     drawCube(modelMatrix, lineColor);
 
-    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, 0.0f)); 
+    modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, linesYCenterPosition, 0.0f));
     modelMatrix = glm::scale(modelMatrix, glm::vec3(courtPlayingAreaW, LINE_THICKNESS_VISUAL_DIM, LINE_WIDTH_DIM));
     drawCube(modelMatrix, lineColor);
 
@@ -596,6 +658,7 @@ void display() {
     glBindVertexArray(0);
     if (wallTextureID != 0) { glBindTexture(GL_TEXTURE_2D, 0); }
 
+
     // --- Fileul și Stâlpii ---
     float netMeshCenterY = floorTopSurfaceY + netBaseElevation + (netActualHeight / 2.0f);
 
@@ -643,7 +706,7 @@ void display() {
     glUniform1i(useTextureID, 0);
 
     glUniform1i(isNetTextureID, GL_FALSE);
-    if (ballIsServed || ballInToss || ballOnBezierPath || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
+    if (ballIsServed || ballInToss || ballOnBezierPath || ballIsFallingAfterNetHit || (!ballIsServed && !isAnimatingForward && !isAnimatingBackward)) {
         modelMatrix = glm::translate(glm::mat4(1.0f), ballPosition);
         drawSphere(modelMatrix, ballColor);
     }
@@ -700,19 +763,21 @@ void display() {
         std::vector<glm::vec3> curveVertices; const int numCurveSegments = 50;
         for (int i = 0; i <= numCurveSegments; ++i) { float t = static_cast<float>(i) / static_cast<float>(numCurveSegments); curveVertices.push_back(CalculateBezierPoint(t, bezierP0, bezierP1, bezierP2, bezierP3)); }
         glUniform3fv(colorID, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
-        glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f))); 
+        glUniformMatrix4fv(modelMatrixID_uniform, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
         glBindVertexArray(bezierCurveVao); glBindBuffer(GL_ARRAY_BUFFER, bezierCurveVbo);
         glBufferData(GL_ARRAY_BUFFER, curveVertices.size() * sizeof(glm::vec3), curveVertices.data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_LINE_STRIP, 0, curveVertices.size());
+        glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(curveVertices.size()));
         glBindVertexArray(0);
     }
     glFlush();
 }
 
 void init() {
+    srand(static_cast<unsigned int>(time(0)));
+
     const GLubyte* renderer = glGetString(GL_RENDERER); const GLubyte* version = glGetString(GL_VERSION); printf("Renderer: %s\n", renderer); printf("OpenGL version supported %s\n", version);
     glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LESS);
-    glEnable(GL_MULTISAMPLE); 
+    glEnable(GL_MULTISAMPLE);
 
     glewExperimental = GL_TRUE; GLenum err = glewInit(); if (GLEW_OK != err) { fprintf(stderr, "Error initializing GLEW: %s\n", glewGetErrorString(err)); exit(1); } printf("Using GLEW %s\n", glewGetString(GLEW_VERSION));
 
@@ -820,19 +885,21 @@ void keyboard(unsigned char key, int x, int y) {
     bool cameraChanged = false;
     switch (key) {
     case 'j':
-        if (!ballIsServed) {
+        if (!ballIsServed && !ballIsFallingAfterNetHit) {
             serviceCount++;
             isAnimatingForward = true; isAnimatingBackward = false; animationProgress = 0.0f;
             ballIsServed = true; ballInToss = true; ballIsHit = false; ballOnBezierPath = false;
+            ballIsFallingAfterNetHit = false;
             ballPosition = glm::vec3(playerBaseX - 0.1f, (floorTopSurfaceY + playerBaseY) + 1.0f, playerBaseZ + 0.5f);
             ballVelocity = glm::vec3(0.05f, 8.8f, 1.1f);
-            std::cout << "Serve initiated. Ball toss." << std::endl;
+            std::cout << "Serve initiated. Ball toss. Service #" << serviceCount << std::endl;
         } break;
     case 'K': isAnimatingBackward = true; isAnimatingForward = false; break;
     case ' ':
         serviceCount = 0;
         isAnimatingForward = false; isAnimatingBackward = false; animationProgress = 0.0f;
         ballIsServed = false; ballInToss = false; ballIsHit = false; ballOnBezierPath = false; bezierTime = 0.0f;
+        ballIsFallingAfterNetHit = false;
         ballPosition = glm::vec3(playerBaseX, (floorTopSurfaceY + playerBaseY) + 0.5f, playerBaseZ + palmLength + ballRadius + 1.0f);
         ballVelocity = glm::vec3(0.0f);
         if (contactKeyframeOriginalsStored && hitKeyframeIndex >= 0 && hitKeyframeIndex < NUM_POSES) {
